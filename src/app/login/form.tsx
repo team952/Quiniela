@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useEffect, useMemo, useActionState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { verifyOtpAction, type VerifyOtpState } from './actions'
 
 type Step = 'email' | 'otp'
 
 export function LoginForm({ next }: { next?: string }) {
   const supabase = useMemo(() => createClient(), [])
-  const router = useRouter()
+  const [verifyState, verifyFormAction, isVerifying] = useActionState<VerifyOtpState, FormData>(verifyOtpAction, null)
 
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
@@ -46,19 +46,6 @@ export function LoginForm({ next }: { next?: string }) {
     if (ok) { setEmail(raw); setStep('otp'); setCooldown(60) }
   }
 
-  async function handleVerify(token: string) {
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
-    if (error) {
-      setLoading(false)
-      setError('Código inválido o expirado. Inténtalo de nuevo.')
-      return
-    }
-    // Redirige a `next` si viene de un invite link; de lo contrario al inicio.
-    router.push(next ?? '/')
-    router.refresh()
-  }
 
   async function handleResend() {
     setLoading(true)
@@ -93,10 +80,11 @@ export function LoginForm({ next }: { next?: string }) {
         ) : (
           <OtpStep
             email={email}
-            loading={loading}
-            error={error}
+            next={next ?? '/'}
+            loading={isVerifying}
+            error={verifyState?.error ?? ''}
             cooldown={cooldown}
-            onVerify={handleVerify}
+            formAction={verifyFormAction}
             onResend={handleResend}
             onChangeEmail={() => { setStep('email'); setError('') }}
           />
@@ -141,23 +129,25 @@ function EmailStep({
 // ── Step 2: OTP ────────────────────────────────────────────────────────────
 
 function OtpStep({
-  email, loading, error, cooldown, onVerify, onResend, onChangeEmail,
+  email, next, loading, error, cooldown, formAction, onResend, onChangeEmail,
 }: {
-  email: string; loading: boolean; error: string; cooldown: number
-  onVerify: (token: string) => void; onResend: () => void; onChangeEmail: () => void
+  email: string; next: string; loading: boolean; error: string; cooldown: number
+  formAction: (formData: FormData) => void; onResend: () => void; onChangeEmail: () => void
 }) {
   const [digits, setDigits] = useState(['', '', '', '', '', ''])
   const refs = useRef<(HTMLInputElement | null)[]>([])
+  const submitRef = useRef<HTMLButtonElement>(null)
 
   function handleChange(i: number, raw: string) {
     const digit = raw.replace(/\D/g, '').slice(-1)
     const next = [...digits]; next[i] = digit; setDigits(next)
     if (digit && i < 5) refs.current[i + 1]?.focus()
+    if (digit && i === 5) submitRef.current?.click()
   }
 
   function handleKeyDown(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Backspace' && !digits[i] && i > 0) {
-      const next = [...digits]; next[i - 1] = ''; setDigits(next)
+      const nd = [...digits]; nd[i - 1] = ''; setDigits(nd)
       refs.current[i - 1]?.focus(); e.preventDefault()
     }
     if (e.key === 'ArrowLeft' && i > 0) refs.current[i - 1]?.focus()
@@ -168,18 +158,13 @@ function OtpStep({
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
     if (!text) return
     e.preventDefault()
-    const next = ['', '', '', '', '', '']; text.split('').forEach((c, i) => { next[i] = c })
-    setDigits(next); refs.current[Math.min(text.length, 5)]?.focus()
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const token = digits.join('')
-    if (token.length < 6) return
-    onVerify(token)
+    const nd = ['', '', '', '', '', '']; text.split('').forEach((c, i) => { nd[i] = c })
+    setDigits(nd); refs.current[Math.min(text.length, 5)]?.focus()
+    if (text.length === 6) submitRef.current?.click()
   }
 
   const isComplete = digits.every(Boolean)
+  const token = digits.join('')
 
   return (
     <>
@@ -191,7 +176,10 @@ function OtpStep({
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} style={s.form}>
+      <form action={formAction} style={s.form}>
+        <input type="hidden" name="email" value={email} />
+        <input type="hidden" name="next" value={next} />
+        <input type="hidden" name="token" value={token} />
         <div style={s.fieldWrapper}>
           <label style={s.label}>Código de 6 dígitos</label>
           <div style={s.otpRow} role="group" aria-label="Código de verificación">
@@ -211,7 +199,7 @@ function OtpStep({
           </div>
           {error && <ErrorMsg>{error}</ErrorMsg>}
         </div>
-        <button type="submit" disabled={loading || !isComplete}
+        <button ref={submitRef} type="submit" disabled={loading || !isComplete}
           style={loading || !isComplete ? { ...s.btn, ...s.btnDisabled } : s.btn}>
           {loading ? <BtnSpinner label="Verificando…" /> : 'Verificar código'}
         </button>
