@@ -23,7 +23,7 @@ export default async function AjustesPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
+  if (!user) redirect(`/campeonato/${id}`)
 
   console.error('[configurar] START user.id:', user.id)
 
