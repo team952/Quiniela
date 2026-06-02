@@ -120,7 +120,7 @@ export function ChampionshipApp({
         </button>
         {isCreator && (
           <a
-            href={`/campeonato/${championshipId}/ajustes`}
+            href={`/campeonato/${championshipId}/configurar`}
             className="tab settings"
           >
             ⚙ Ajustes
