@@ -21,19 +21,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(SITE_URL),
   title: 'Quiniela Mundial 2026',
   description: 'Pronostica los resultados del Mundial 2026 y compite con tus amigos.',
   openGraph: {
     title: 'Quiniela Mundial 2026',
     description: 'Pronostica los resultados del Mundial 2026 y compite con tus amigos.',
-    images: [{ url: '/og-quiniela.jpg', width: 1200, height: 630 }],
+    images: [{ url: `${SITE_URL}/og-quiniela.jpg`, width: 1200, height: 630 }],
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    images: ['/og-quiniela.jpg'],
+    images: [`${SITE_URL}/og-quiniela.jpg`],
   },
 };
 

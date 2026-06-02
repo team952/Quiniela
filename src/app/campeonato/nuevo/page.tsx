@@ -3,16 +3,18 @@ import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { NuevoCampeonatoForm } from './form'
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
 export const metadata: Metadata = {
   title: 'Crear campeonato — Quiniela Mundial 2026',
   openGraph: {
     title: 'Crea tu quiniela del Mundial 2026',
     description: 'Crea un campeonato privado y compite con tus amigos.',
-    images: [{ url: '/og-creator.jpg', width: 1200, height: 630 }],
+    images: [{ url: `${SITE_URL}/og-creator.jpg`, width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
-    images: ['/og-creator.jpg'],
+    images: [`${SITE_URL}/og-creator.jpg`],
   },
 }
 
