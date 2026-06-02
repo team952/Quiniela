@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdmin } from '@supabase/supabase-js'
 import { AjustesForm, type ChampionshipData } from './form'
 
+export const dynamic = 'force-dynamic'
+
 type Props = { params: Promise<{ id: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -39,10 +41,6 @@ export default async function AjustesPage({ params }: Props) {
     .select('id, name, invite_code, display_timezone, mod_knockout_matches, mod_group_standings, mod_podium, mod_golden_boot, mod_mvp, created_by')
     .eq('id', id)
     .single()
-
-  console.log('[ajustes] user.id:', user.id)
-  console.log('[ajustes] championship:', championship?.id, 'created_by:', championship?.created_by)
-  console.log('[ajustes] error:', error?.message)
 
   if (error || !championship) notFound()
   if (championship.created_by !== user.id) notFound()
