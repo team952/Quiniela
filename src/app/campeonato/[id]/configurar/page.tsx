@@ -10,12 +10,8 @@ type Props = { params: Promise<{ id: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
-  const admin = createAdmin(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } },
-  )
-  const { data } = await admin.from('championships').select('name').eq('id', id).single()
+  const supabase = await createClient()
+  const { data } = await supabase.from('championships').select('name').eq('id', id).single()
   return { title: data ? `${data.name} — Ajustes` : 'Ajustes del campeonato' }
 }
 
@@ -29,25 +25,26 @@ export default async function AjustesPage({ params }: Props) {
 
   if (!user) redirect('/login')
 
-  const admin = createAdmin(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } },
-  )
+  console.error('[configurar] START user.id:', user.id)
 
-  const { data: championship, error } = await admin
+  // Mismo cliente regular que usa la página principal del campeonato
+  const { data: championship, error } = await supabase
     .from('championships')
     .select('id, name, invite_code, display_timezone, mod_knockout_matches, mod_group_standings, mod_podium, mod_golden_boot, mod_mvp, created_by')
     .eq('id', id)
     .single()
 
-  console.error('[configurar] error:', error?.message ?? null)
-  console.error('[configurar] championship.id:', championship?.id ?? null)
-  console.error('[configurar] created_by:', championship?.created_by ?? null)
-  console.error('[configurar] user.id:', user.id)
+  console.error('[configurar] championship.id:', championship?.id ?? null, 'error:', error?.message ?? null)
+  console.error('[configurar] created_by:', (championship as any)?.created_by ?? null, 'match:', (championship as any)?.created_by === user.id)
 
   if (error || !championship) notFound()
-  if (championship.created_by !== user.id) notFound()
+  if ((championship as any).created_by !== user.id) notFound()
+
+  const admin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  )
 
   const todayET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())
   const { count: openKnockoutCount } = await admin
