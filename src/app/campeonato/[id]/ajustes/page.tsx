@@ -27,21 +27,22 @@ export default async function AjustesPage({ params }: Props) {
 
   if (!user) redirect('/login')
 
-  const { data: championship, error } = await supabase
-    .from('championships')
-    .select('id, name, invite_code, display_timezone, mod_knockout_matches, mod_group_standings, mod_podium, mod_golden_boot, mod_mvp')
-    .eq('id', id)
-    .eq('created_by', user.id)
-    .single()
-
-  if (error || !championship) notFound()
-
-  // Service role para leer matches (RLS bloquea al usuario)
+  // Service role para leer datos globales (RLS bloquea al usuario en algunas tablas)
   const admin = createAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
   )
+
+  const { data: championship, error } = await admin
+    .from('championships')
+    .select('id, name, invite_code, display_timezone, mod_knockout_matches, mod_group_standings, mod_podium, mod_golden_boot, mod_mvp, created_by')
+    .eq('id', id)
+    .single()
+
+  if (error || !championship) notFound()
+  if (championship.created_by !== user.id) notFound()
+
   const todayET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())
   const { count: openKnockoutCount } = await admin
     .from('matches')
