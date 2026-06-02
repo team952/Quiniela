@@ -30,7 +30,7 @@ const OPTIONAL_MODULES = [
   {
     key: 'mod_knockout_matches' as const,
     label: 'Resultados fase eliminatoria',
-    desc: 'Pronostica el marcador de cada partido desde octavos de final. Cada partido cierra a las 00:00 ET de su día.',
+    desc: 'Pronostica el marcador de cada partido desde la ronda de 32. Cada partido cierra a las 00:00 ET de su día.',
     lock: null as Date | null,
     rollingLockLabel: 'Cierre: 00:00 ET del día de cada partido',
   },
