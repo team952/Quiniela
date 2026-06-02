@@ -160,7 +160,7 @@ export function TablaView({ groups }: Props) {
       {/* Grid de tablas — inline styles para garantizar el layout incluso desde display:none */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
         gap: '16px',
       }}>
         {visible.map(g => <StandingsTable key={g.groupId} group={g} />)}
