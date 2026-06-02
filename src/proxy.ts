@@ -2,6 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+  if (/\/ajustes(\.rsc)?$/.test(pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname.replace(/\/ajustes(\.rsc)?$/, '/configurar')
+    return NextResponse.redirect(url, 308)
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
