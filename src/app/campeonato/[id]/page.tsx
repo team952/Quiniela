@@ -1,0 +1,383 @@
+import { redirect, notFound } from 'next/navigation'
+import type { Metadata } from 'next'
+import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdmin } from '@supabase/supabase-js'
+import {
+  CLASSIFICATION_LOCK,
+  PODIUM_BOOT_MVP_LOCK,
+  isModuleLocked,
+  isMatchLocked,
+  formatLockDate,
+} from '@/lib/constants'
+import type { MatchForCal, InitPred } from './calendario/calendario-view'
+import type { GroupStanding } from './tablas/tablas-view'
+import type { Participant, ResultMatch, PredsByMatch } from './resultados/resultados-view'
+import { ChampionshipApp } from './championship-app'
+
+type Props = { params: Promise<{ id: string }> }
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data } = await supabase.from('championships').select('name').eq('id', id).single()
+  return { title: data?.name ? `${data.name} — Quiniela Mundial 2026` : 'Campeonato' }
+}
+
+export default async function CampeonatoPage({ params }: Props) {
+  const { id } = await params
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect(`/login?next=${encodeURIComponent(`/campeonato/${id}`)}`)
+  }
+
+  // Championship + módulos
+  const { data: championship, error: champError } = await supabase
+    .from('championships')
+    .select('id, name, invite_code, display_timezone, created_by, mod_group_standings, mod_podium, mod_golden_boot, mod_mvp, mod_knockout_matches')
+    .eq('id', id)
+    .single()
+
+  if (champError || !championship) notFound()
+
+  // Membresía
+  const { data: membership } = await supabase
+    .from('championship_users')
+    .select('display_name, group_points, knockout_points')
+    .eq('championship_id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) {
+    redirect(`/unirse?code=${championship.invite_code}`)
+  }
+
+  // Admin client para datos globales del torneo que RLS no devuelve al usuario normal
+  const admin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  )
+
+  // ── Fetch de datos en paralelo ───────────────────────────────────────────
+
+  const [
+    { data: rawGroups },
+    { data: rawTeams },
+    { data: rawPlayers },
+    { data: groupPreds },
+    { data: specialPred },
+    { data: rawMatches },
+    { data: rawMatchPreds },
+    { data: rawStandings },
+    { data: rawParticipants },
+    { data: rawFeaturedMatches },
+    { data: rawOtherMemberships },
+  ] = await Promise.all([
+    // Datos globales — leídos con service role (RLS bloquea matches al usuario regular)
+    admin.from('groups').select('id, name').order('name'),
+    admin.from('teams').select('id, name, group_id').order('name'),
+    admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name'),
+
+    // Datos del usuario — leídos con sesión del usuario (RLS garantiza privacidad)
+    supabase
+      .from('group_predictions')
+      .select('group_id, first_place, second_place, third_place, fourth_place')
+      .eq('championship_id', id)
+      .eq('user_id', user.id),
+
+    supabase
+      .from('special_predictions')
+      .select('gold_team_id, silver_team_id, bronze_team_id, golden_boot_player_id, mvp_player_id')
+      .eq('championship_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+
+    // Partidos — service role porque RLS de matches no permite leer al usuario
+    // Sin filtro de fase: incluye grupo + eliminatoria (se filtra abajo por módulo)
+    admin
+      .from('matches')
+      .select('id, date, time, ground, group_id, team1_id, team2_id, team1_placeholder, team2_placeholder, phase, round, kickoff_utc')
+      .order('kickoff_utc', { nullsFirst: false })
+      .order('id'),
+
+    // Pronósticos de marcadores — sesión del usuario
+    supabase
+      .from('predictions')
+      .select('match_id, score1, score2')
+      .eq('championship_id', id)
+      .eq('user_id', user.id),
+
+    // Standings — service role (datos globales del torneo)
+    admin.from('standings').select('team_id, group_id, played, won, drawn, lost, gf, ga, gd, points'),
+
+    // Participantes del campeonato (el orden lo maneja el cliente por puntos + empates)
+    admin
+      .from('championship_users')
+      .select('user_id, display_name, group_points, knockout_points')
+      .eq('championship_id', id),
+
+    // Todos los partidos (grupo + eliminatoria) para el tab Resultados
+    admin
+      .from('matches')
+      .select('id, date, ground, group_id, round, team1_id, team2_id, team1_placeholder, team2_placeholder, score1, score2, status, phase, kickoff_utc')
+      .order('kickoff_utc', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true }),
+
+    // Otros campeonatos del usuario (para "Copiar pronósticos")
+    supabase
+      .from('championship_users')
+      .select('championship_id, championships(id, name)')
+      .eq('user_id', user.id)
+      .neq('championship_id', id),
+  ])
+
+  // ── Join manual ───────────────────────────────────────────────────────────
+
+  // Mapa teamId → teamName
+  const teamNameMap = new Map<number, string>(
+    (rawTeams ?? []).map((t) => [t.id as number, t.name as string]),
+  )
+
+  // Grupos con sus equipos
+  const groups = (rawGroups ?? []).map((g) => ({
+    id: g.id as number,
+    name: g.name as string,
+    teams: (rawTeams ?? [])
+      .filter((t) => (t.group_id as number) === (g.id as number))
+      .map((t) => ({ id: t.id as number, name: t.name as string, flagUrl: null })),
+  }))
+
+  // Todos los equipos (para el selector de podio)
+  const teams = (rawTeams ?? []).map((t) => ({
+    id: t.id as number,
+    name: t.name as string,
+    flagUrl: null,
+  }))
+
+  // Jugadores con team_name resuelto
+  const players = (rawPlayers ?? []).map((p) => ({
+    id: p.id as number,
+    name: p.name as string,
+    club: p.club as string | null,
+    position: p.position as 'GK' | 'DEF' | 'MID' | 'FWD',
+    teamId: p.team_id as number,
+    teamName: teamNameMap.get(p.team_id as number) ?? '',
+  }))
+
+  // Pronósticos de grupos
+  const initialGroupPredictions = (groupPreds ?? []).map((gp) => ({
+    groupId: gp.group_id as number,
+    firstPlace: gp.first_place as number | null,
+    secondPlace: gp.second_place as number | null,
+    thirdPlace: gp.third_place as number | null,
+    fourthPlace: gp.fourth_place as number | null,
+  }))
+
+  // Pronósticos especiales
+  const initialSpecialPrediction = specialPred
+    ? {
+        goldTeamId: specialPred.gold_team_id as number | null,
+        silverTeamId: specialPred.silver_team_id as number | null,
+        bronzeTeamId: specialPred.bronze_team_id as number | null,
+        goldenBootPlayerId: specialPred.golden_boot_player_id as number | null,
+        mvpPlayerId: specialPred.mvp_player_id as number | null,
+      }
+    : null
+
+  const isClassificationLocked = isModuleLocked(CLASSIFICATION_LOCK)
+  const isPodiumLocked = isModuleLocked(PODIUM_BOOT_MVP_LOCK)
+
+  // ── Datos del Calendario ──────────────────────────────────────────────────
+
+  // Mapa groupId → groupName
+  const groupNameMap = new Map<number, string>(
+    (rawGroups ?? []).map((g) => [g.id as number, g.name as string]),
+  )
+
+  const groupMatches: MatchForCal[] = (rawMatches ?? [])
+    .filter(m => m.phase === 'group' || championship.mod_knockout_matches)
+    .map((m) => {
+      const t1 = m.team1_id ? teamNameMap.get(m.team1_id as number) : null
+      const t2 = m.team2_id ? teamNameMap.get(m.team2_id as number) : null
+      const gName = m.group_id ? (groupNameMap.get(m.group_id as number) ?? null) : null
+      return {
+        id:            m.id as number,
+        date:          m.date as string,
+        time:          (m.time as string | null) ?? '',
+        ground:        m.ground as string | null,
+        phase:         m.phase as string,
+        groupName:     gName,
+        round:         (m.round as string | null) ?? null,
+        team1Name:     t1 ?? (m.team1_placeholder as string | null) ?? '?',
+        team2Name:     t2 ?? (m.team2_placeholder as string | null) ?? '?',
+        teamsResolved: !!(m.team1_id && m.team2_id),
+        isLocked:      isMatchLocked(m.kickoff_utc as string | null),
+      }
+    })
+
+  const initialMatchPredictions: InitPred[] = (rawMatchPreds ?? []).map((p) => ({
+    matchId: p.match_id as number,
+    score1:  p.score1 as number | null,
+    score2:  p.score2 as number | null,
+  }))
+
+  // ── Standings por grupo ───────────────────────────────────────────────────
+
+  // Mapa teamId → standings row
+  const standMap = new Map<number, {played:number;won:number;drawn:number;lost:number;gf:number;ga:number;gd:number;points:number}>(
+    (rawStandings ?? []).map((s) => [s.team_id as number, {
+      played: s.played as number, won: s.won as number, drawn: s.drawn as number,
+      lost: s.lost as number, gf: s.gf as number, ga: s.ga as number,
+      gd: s.gd as number, points: s.points as number,
+    }]),
+  )
+
+  // ── Datos de Resultados ───────────────────────────────────────────────────
+
+  // Partidos con resultado — grupo siempre, eliminatoria solo si el módulo está activo
+  const resultMatches: ResultMatch[] = (rawFeaturedMatches ?? [])
+    .filter(m => (m.phase as string) === 'group' || championship.mod_knockout_matches)
+    .map((m) => {
+    const t1 = m.team1_id ? teamNameMap.get(m.team1_id as number) : null
+    const t2 = m.team2_id ? teamNameMap.get(m.team2_id as number) : null
+    return {
+      id:        m.id as number,
+      team1Name: t1 ?? (m.team1_placeholder as string | null) ?? '?',
+      team2Name: t2 ?? (m.team2_placeholder as string | null) ?? '?',
+      date:      m.date as string,
+      score1:    m.score1 as number | null,
+      score2:    m.score2 as number | null,
+      ground:    m.ground as string | null,
+      groupName: m.group_id ? (groupNameMap.get(m.group_id as number) ?? null) : null,
+      round:     (m.round as string | null) ?? null,
+      status:    m.status as string,
+      // Predicciones visibles si: partido finalizado O cerrado por fecha.
+      // Anti-copia: si el admin entró el resultado, el partido ya no es "abierto".
+      predVisible: (m.status as string) === 'finished' || (m.status as string) === 'live' || isMatchLocked(m.kickoff_utc as string | null),
+    }
+  })
+
+  // Predicciones de TODOS los participantes para los partidos ya cerrados
+  // (anti-copia: solo se muestran pronósticos de partidos bloqueados)
+  // Todos los partidos con resultado tienen predicciones visibles
+  const lockedMatchIds = resultMatches.filter(m => m.predVisible).map(m => m.id)
+  let predsByMatch: PredsByMatch = {}
+
+  if (lockedMatchIds.length > 0) {
+    const { data: allPreds } = await admin
+      .from('predictions')
+      .select('match_id, user_id, score1, score2')
+      .eq('championship_id', id)
+      .in('match_id', lockedMatchIds)
+
+    for (const p of allPreds ?? []) {
+      const mid = p.match_id as number
+      const uid = p.user_id as string
+      if (!predsByMatch[mid]) predsByMatch[mid] = {}
+      predsByMatch[mid][uid] = {
+        s1: p.score1 as number | null,
+        s2: p.score2 as number | null,
+      }
+    }
+  }
+
+  // ── Puntos de la jornada (partidos jugados HOY en America/New_York) ─────────
+  // Permite mostrar "+N" en la tabla de resultados sin refrescar.
+  const todayET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())
+
+  const { data: todayMatchRows } = await admin
+    .from('matches')
+    .select('id')
+    .eq('date', todayET)
+    .not('score1', 'is', null)   // solo los que ya tienen resultado
+
+  const todayMatchIds = (todayMatchRows ?? []).map(m => m.id as number)
+  const todayPtsMap: Record<string, number> = {}
+
+  if (todayMatchIds.length > 0) {
+    const { data: todayPreds } = await admin
+      .from('predictions')
+      .select('user_id, points_earned')
+      .eq('championship_id', id)
+      .in('match_id', todayMatchIds)
+      .not('points_earned', 'is', null)
+
+    for (const p of todayPreds ?? []) {
+      const uid = p.user_id as string
+      todayPtsMap[uid] = (todayPtsMap[uid] ?? 0) + ((p.points_earned as number) ?? 0)
+    }
+  }
+
+  const hasTodayMatches = todayMatchIds.length > 0
+
+  // Ranking de participantes
+  const participants: Participant[] = (rawParticipants ?? []).map((p) => ({
+    userId:        p.user_id as string,
+    displayName:   p.display_name as string,
+    groupPoints:   (p.group_points as number | null) ?? 0,
+    knockoutPoints:(p.knockout_points as number | null) ?? 0,
+    isCurrentUser: p.user_id === user.id,
+    todayPoints:   todayPtsMap[p.user_id as string] ?? 0,
+  }))
+
+  const groupStandings: GroupStanding[] = (rawGroups ?? []).map((g) => ({
+    groupId:   g.id as number,
+    groupName: g.name as string,
+    rows: (rawTeams ?? [])
+      .filter((t) => (t.group_id as number) === (g.id as number))
+      .map((t) => {
+        const st = standMap.get(t.id as number) ?? { played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, points:0 }
+        return { teamId: t.id as number, teamName: t.name as string, ...st }
+      }),
+  }))
+
+  // Otros campeonatos del usuario para "Copiar pronósticos"
+  // Supabase devuelve el join como any — normalizamos explícitamente
+  const otherChampionships: { id: string; name: string }[] = (rawOtherMemberships ?? [])
+    .map((m) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (m as any).championships
+      if (!raw) return null
+      const c = Array.isArray(raw) ? raw[0] : raw
+      return c ? { id: c.id as string, name: c.name as string } : null
+    })
+    .filter((c): c is { id: string; name: string } => c !== null)
+
+  return (
+    <ChampionshipApp
+      championshipId={id}
+      userId={user.id}
+      championshipName={championship.name}
+      displayName={membership.display_name}
+      isCreator={championship.created_by === user.id}
+      modules={{
+        groupStandings: championship.mod_group_standings,
+        podium: championship.mod_podium,
+        goldenBoot: championship.mod_golden_boot,
+        mvp: championship.mod_mvp,
+      }}
+      isClassificationLocked={isClassificationLocked}
+      isPodiumLocked={isPodiumLocked}
+      classificationLockLabel={formatLockDate(CLASSIFICATION_LOCK)}
+      podiumLockLabel={formatLockDate(PODIUM_BOOT_MVP_LOCK)}
+      groups={groups}
+      teams={teams}
+      players={players}
+      initialGroupPredictions={initialGroupPredictions}
+      initialSpecialPrediction={initialSpecialPrediction}
+      groupMatches={groupMatches}
+      initialMatchPredictions={initialMatchPredictions}
+      groupStandings={groupStandings}
+      participants={participants}
+      resultMatches={resultMatches}
+      predsByMatch={predsByMatch}
+      hasTodayMatches={hasTodayMatches}
+      otherChampionships={otherChampionships}
+    />
+  )
+}
