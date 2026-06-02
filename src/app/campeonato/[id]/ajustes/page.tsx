@@ -40,6 +40,10 @@ export default async function AjustesPage({ params }: Props) {
     .eq('id', id)
     .single()
 
+  console.log('[ajustes] user.id:', user.id)
+  console.log('[ajustes] championship:', championship?.id, 'created_by:', championship?.created_by)
+  console.log('[ajustes] error:', error?.message)
+
   if (error || !championship) notFound()
   if (championship.created_by !== user.id) notFound()
 
