@@ -1,7 +1,7 @@
-import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { NuevoCampeonatoForm } from './form'
+import { LoginForm } from '@/app/login/form'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
@@ -24,7 +24,7 @@ export default async function NuevoCampeonatoPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
+  if (!user) return <LoginForm next="/campeonato/nuevo" />
 
   return (
     <main style={pageStyle}>

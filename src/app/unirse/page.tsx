@@ -1,10 +1,21 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { JoinForm, type JoinChampionshipData } from './form'
+import { LoginForm } from '@/app/login/form'
 
-export const metadata: Metadata = { title: 'Unirse al campeonato — Quiniela Mundial 2026' }
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
+export const metadata: Metadata = {
+  title: 'Unirse al campeonato — Quiniela Mundial 2026',
+  openGraph: {
+    images: [{ url: `${SITE_URL}/og-quiniela.jpg`, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: 'summary_large_image' as const,
+    images: [`${SITE_URL}/og-quiniela.jpg`],
+  },
+}
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
 
@@ -21,10 +32,9 @@ export default async function QuinielaPage({ searchParams }: Props) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Si no está autenticado → login preservando el code para volver aquí
+  // Si no está autenticado → mostrar login inline (sin HTTP redirect, para que el OG llegue al crawler)
   if (!user) {
-    const next = encodeURIComponent(`/unirse?code=${code}`)
-    redirect(`/login?next=${next}`)
+    return <LoginForm next={`/unirse?code=${code}`} />
   }
 
   // Buscar el campeonato por invite_code
