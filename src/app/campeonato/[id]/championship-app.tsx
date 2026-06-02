@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { EspecialesView, type GroupWithTeams, type PlayerRow, type TeamRow } from './especiales/view'
 import { CalendarioView, type MatchForCal, type InitPred } from './calendario/calendario-view'
 import { TablaView, type GroupStanding } from './tablas/tablas-view'
@@ -76,6 +77,7 @@ export function ChampionshipApp({
   hasTodayMatches,
   otherChampionships,
 }: Props) {
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('cal')
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
@@ -119,12 +121,12 @@ export function ChampionshipApp({
           Resultados
         </button>
         {isCreator && (
-          <a
-            href={`/quiniela/campeonato/${championshipId}/configurar`}
+          <button
             className="tab settings"
+            onClick={() => router.push(`/campeonato/${championshipId}/configurar`)}
           >
             ⚙ Ajustes
-          </a>
+          </button>
         )}
       </div>
 
