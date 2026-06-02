@@ -41,6 +41,11 @@ export default async function AjustesPage({ params }: Props) {
     .eq('id', id)
     .single()
 
+  console.error('[configurar] error:', error?.message ?? null)
+  console.error('[configurar] championship.id:', championship?.id ?? null)
+  console.error('[configurar] created_by:', championship?.created_by ?? null)
+  console.error('[configurar] user.id:', user.id)
+
   if (error || !championship) notFound()
   if (championship.created_by !== user.id) notFound()
 
