@@ -207,19 +207,51 @@ function OrderList({
   teams: TeamInList[]; locked: boolean; onReorder: (next: TeamInList[]) => void; color: string
 }) {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const touchFromRef = useRef<number | null>(null)
+  const teamsRef = useRef(teams)
+  teamsRef.current = teams
+
+  function onTouchStart(i: number) {
+    if (locked) return
+    touchFromRef.current = i
+    setDragIdx(i)
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const from = touchFromRef.current
+    if (from === null) return
+    const touch = e.touches[0]
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const li = el?.closest('[data-sort-idx]') as HTMLElement | null
+    if (!li) return
+    const to = parseInt(li.dataset.sortIdx ?? '-1')
+    if (to === -1 || to === from) return
+    const next = teamsRef.current.slice()
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    touchFromRef.current = to
+    setDragIdx(to)
+    onReorder(next)
+  }
+
+  function onTouchEnd() {
+    touchFromRef.current = null
+    setDragIdx(null)
+  }
 
   return (
     <ul className="sortlist">
       {teams.map((t, i) => (
         <li
           key={t.id}
+          data-sort-idx={i}
           className={
             'sortitem' +
             (i < 2 ? ' qual' : '') +
             (locked ? ' locked' : '') +
             (dragIdx === i ? ' dragging' : '')
           }
-          style={{ '--gc': color } as React.CSSProperties}
+          style={{ '--gc': color, touchAction: locked ? undefined : 'none' } as React.CSSProperties}
           draggable={!locked}
           onDragStart={() => setDragIdx(i)}
           onDragOver={(e) => {
@@ -233,6 +265,9 @@ function OrderList({
           }}
           onDragEnd={() => setDragIdx(null)}
           onDrop={(e) => { e.preventDefault(); setDragIdx(null) }}
+          onTouchStart={() => onTouchStart(i)}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
         >
           <span className="srank">{ORD[i]}</span>
           <img
