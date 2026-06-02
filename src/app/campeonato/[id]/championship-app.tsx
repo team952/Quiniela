@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { EspecialesView, type GroupWithTeams, type PlayerRow, type TeamRow } from './especiales/view'
 import { CalendarioView, type MatchForCal, type InitPred } from './calendario/calendario-view'
 import { TablaView, type GroupStanding } from './tablas/tablas-view'
@@ -119,12 +120,12 @@ export function ChampionshipApp({
           Resultados
         </button>
         {isCreator && (
-          <a
+          <Link
             href={`/campeonato/${championshipId}/configurar`}
             className="tab settings"
           >
             ⚙ Ajustes
-          </a>
+          </Link>
         )}
       </div>
 
