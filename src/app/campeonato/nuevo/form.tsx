@@ -225,7 +225,7 @@ function SuccessView({
       </div>
       <div style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column' as const }}>
         <Link
-          href={`/campeonato/${championshipId}/ajustes`}
+          href={`/campeonato/${championshipId}/configurar`}
           style={{ ...s.btn, display: 'block', textDecoration: 'none', textAlign: 'center' as const }}
         >
           Ver ajustes del campeonato

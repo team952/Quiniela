@@ -790,7 +790,7 @@ export function EspecialesView({
                 Este campeonato no tiene módulos especiales activos.
               </p>
               <Link
-                href={`/campeonato/${championshipId}/ajustes`}
+                href={`/campeonato/${championshipId}/configurar`}
                 style={{ color: 'var(--vio)', fontWeight: 700, fontSize: '0.875rem' }}
               >
                 Configurar módulos →

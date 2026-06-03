@@ -2,10 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function proxy(request: NextRequest) {
-  const { pathname, basePath } = request.nextUrl
+  const { pathname } = request.nextUrl
   if (/\/ajustes(\.rsc)?$/.test(pathname)) {
-    const url = request.nextUrl.clone()
-    url.pathname = basePath + pathname.replace(/\/ajustes(\.rsc)?$/, '/configurar')
+    const url = new URL(request.url)
+    url.pathname = url.pathname.replace(/\/ajustes(\.rsc)?$/, '/configurar')
     return NextResponse.redirect(url, 308)
   }
 
