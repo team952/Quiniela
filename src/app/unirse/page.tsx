@@ -34,7 +34,7 @@ export default async function QuinielaPage({ searchParams }: Props) {
 
   // Si no está autenticado → mostrar login inline (sin HTTP redirect, para que el OG llegue al crawler)
   if (!user) {
-    return <LoginForm next={`/unirse?code=${code}`} />
+    return <LoginForm next={`/unirse?code=${code}`} verifyOtpUrl={`${SITE_URL}/api/auth/verify-otp`} />
   }
 
   // Buscar el campeonato por invite_code

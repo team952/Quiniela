@@ -24,7 +24,7 @@ export default async function NuevoCampeonatoPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) return <LoginForm next="/campeonato/nuevo" />
+  if (!user) return <LoginForm next="/campeonato/nuevo" verifyOtpUrl={`${SITE_URL}/api/auth/verify-otp`} />
 
   return (
     <main style={pageStyle}>

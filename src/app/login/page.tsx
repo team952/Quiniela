@@ -26,6 +26,16 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
 export default async function LoginPage({ searchParams }: Props) {
   const params = await searchParams
-  const next = typeof params.next === 'string' ? params.next : undefined
-  return <LoginForm next={next} />
+  const next         = typeof params.next === 'string'  ? params.next  : undefined
+  const initialEmail = typeof params.email === 'string' ? params.email : undefined
+  const otpError     = params.otp_error === '1'
+  const verifyOtpUrl = `${SITE_URL}/api/auth/verify-otp`
+  return (
+    <LoginForm
+      next={next}
+      initialEmail={initialEmail}
+      otpError={otpError}
+      verifyOtpUrl={verifyOtpUrl}
+    />
+  )
 }
