@@ -27,6 +27,17 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: 'Quiniela Mundial 2026',
   description: 'Pronostica los resultados del Mundial 2026 y compite con tus amigos.',
+  icons: {
+    icon: [
+      { url: `${SITE_URL}/favicon.svg`,    type: 'image/svg+xml' },
+      { url: `${SITE_URL}/favicon-32.png`, sizes: '32x32', type: 'image/png' },
+    ],
+    apple: { url: `${SITE_URL}/apple-touch-icon.png` },
+    other: [
+      { rel: 'icon', url: `${SITE_URL}/icon-192.png`, sizes: '192x192', type: 'image/png' },
+      { rel: 'icon', url: `${SITE_URL}/icon-512.png`, sizes: '512x512', type: 'image/png' },
+    ],
+  },
   openGraph: {
     title: 'Quiniela Mundial 2026',
     description: 'Pronostica los resultados del Mundial 2026 y compite con tus amigos.',
