@@ -289,19 +289,19 @@ function OrderList({
 // ── TeamPlayerPicker — adaptado a datos reales de la BD ───────────────────────
 
 function TeamPlayerPicker({
-  players, state, locked, onChange,
+  teams, players, state, locked, onChange,
 }: {
+  teams: TeamRow[]
   players: PlayerRow[]
   state: { teamId: number | null; playerId: number | null }
   locked: boolean
   onChange: (teamId: number | null, playerId: number | null) => void
 }) {
-  // Unique teams from loaded players, sorted by Spanish name
-  const teamOptions = useMemo(() => {
-    const seen = new Map<number, string>()
-    for (const p of players) if (!seen.has(p.teamId)) seen.set(p.teamId, p.teamName)
-    return [...seen.entries()].sort((a, b) => esName(a[1]).localeCompare(esName(b[1])))
-  }, [players])
+  // All 48 teams, sorted by Spanish name
+  const teamOptions = useMemo(() =>
+    [...teams].sort((a, b) => esName(a.name).localeCompare(esName(b.name))),
+    [teams]
+  )
 
   const selectedTeamPlayers = useMemo(() => {
     if (!state.teamId) return []
@@ -332,8 +332,8 @@ function TeamPlayerPicker({
           }}
         >
           <option value="">— Elegir selección —</option>
-          {teamOptions.map(([id, name]) => (
-            <option key={id} value={id}>{esName(name)}</option>
+          {teamOptions.map((t) => (
+            <option key={t.id} value={t.id}>{esName(t.name)}</option>
           ))}
         </select>
       </div>
@@ -710,6 +710,7 @@ export function EspecialesView({
                 <PlayerChosen player={players.find((p) => p.id === botaState.playerId)!} />
               ) : (
                 <TeamPlayerPicker
+                  teams={teams}
                   players={players}
                   state={botaState}
                   locked={isPodiumLocked || botaConfirmed}
@@ -753,6 +754,7 @@ export function EspecialesView({
                 <PlayerChosen player={players.find((p) => p.id === mvpState.playerId)!} />
               ) : (
                 <TeamPlayerPicker
+                  teams={teams}
                   players={players}
                   state={mvpState}
                   locked={isPodiumLocked || mvpConfirmed}
