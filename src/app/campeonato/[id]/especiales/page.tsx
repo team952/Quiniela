@@ -76,6 +76,7 @@ export default async function EspecialesPage({ params }: Props) {
     .select('id, name, club, position, team_id, teams(name)')
     .order('team_id')
     .order('name')
+    .limit(2000)
   const players: PlayerRow[] = (rawPlayers ?? []).map((p) => {
     const teamRel = p.teams as unknown as { name: string } | null
     return {
