@@ -81,7 +81,11 @@ export default async function CampeonatoPage({ params }: Props) {
     // Datos globales — leídos con service role (RLS bloquea matches al usuario regular)
     admin.from('groups').select('id, name').order('name'),
     admin.from('teams').select('id, name, group_id').order('name'),
-    admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').limit(2000),
+    // Dos batches para superar el límite de 1000 filas del servidor Supabase
+    Promise.all([
+      admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').range(0, 999),
+      admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').range(1000, 1999),
+    ]).then(([r1, r2]) => ({ data: [...(r1.data ?? []), ...(r2.data ?? [])], error: r1.error ?? r2.error })),
 
     // Datos del usuario — leídos con sesión del usuario (RLS garantiza privacidad)
     supabase

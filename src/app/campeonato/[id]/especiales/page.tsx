@@ -71,12 +71,11 @@ export default async function EspecialesPage({ params }: Props) {
   }))
 
   // Players with team name (for bota/mvp)
-  const { data: rawPlayers } = await supabase
-    .from('players')
-    .select('id, name, club, position, team_id, teams(name)')
-    .order('team_id')
-    .order('name')
-    .limit(2000)
+  const [r1, r2] = await Promise.all([
+    supabase.from('players').select('id, name, club, position, team_id, teams(name)').order('team_id').order('name').range(0, 999),
+    supabase.from('players').select('id, name, club, position, team_id, teams(name)').order('team_id').order('name').range(1000, 1999),
+  ])
+  const rawPlayers = [...(r1.data ?? []), ...(r2.data ?? [])]
   const players: PlayerRow[] = (rawPlayers ?? []).map((p) => {
     const teamRel = p.teams as unknown as { name: string } | null
     return {

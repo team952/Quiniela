@@ -110,6 +110,9 @@ export function NuevoCampeonatoForm() {
   return (
     <div style={s.card}>
       <p style={s.cardHeading}>Crear campeonato</p>
+      <p style={s.cardSubtext}>
+        Elige un nombre, configura los módulos que quieres incluir y te generaremos un enlace único para invitar a tus amigos. Podrás ajustar los módulos en cualquier momento desde la configuración del campeonato.
+      </p>
 
       <form action={formAction} style={s.form} noValidate>
         {OPTIONAL_MODULES.map((m) => (
@@ -134,6 +137,9 @@ export function NuevoCampeonatoForm() {
 
         <div style={s.modulesSection}>
           <p style={s.sectionLabel}>Módulos de pronóstico</p>
+          <p style={s.modulesSectionHint}>
+            Elige qué categorías se pronostican en tu campeonato. Puedes activar o desactivar módulos después de crearlo, siempre que el plazo no haya vencido.
+          </p>
 
           {/* Resultados de grupos — siempre activo */}
           <ModuleRow
@@ -325,6 +331,8 @@ function ErrorMsg({ children }: { children: React.ReactNode }) {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const s = {
+  cardSubtext: { fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontWeight: 400, fontSize: '0.85rem', color: '#93a6c6', margin: '-0.25rem 0 0', lineHeight: 1.5 },
+  modulesSectionHint: { fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontWeight: 400, fontSize: '0.75rem', color: '#5f7196', margin: 0, padding: '0 1rem 0.625rem', lineHeight: 1.4 },
   card: { position: 'relative' as const, zIndex: 1, width: '100%', maxWidth: '480px', background: 'linear-gradient(180deg, #11233f 0%, #0d1b32 100%)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '2rem', display: 'flex', flexDirection: 'column' as const, gap: '1.25rem', boxShadow: '0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,154,225,0.08)' },
   cardHeading: { fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontWeight: 700, fontSize: '0.9rem', letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: '#93a6c6', margin: 0 },
   form: { display: 'flex', flexDirection: 'column' as const, gap: '1rem' },
