@@ -81,7 +81,7 @@ export default async function CampeonatoPage({ params }: Props) {
     // Datos globales — leídos con service role (RLS bloquea matches al usuario regular)
     admin.from('groups').select('id, name').order('name'),
     admin.from('teams').select('id, name, group_id').order('name'),
-    admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name'),
+    admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').limit(2000),
 
     // Datos del usuario — leídos con sesión del usuario (RLS garantiza privacidad)
     supabase
