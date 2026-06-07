@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Anton, Archivo } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const anton = Anton({
@@ -62,6 +63,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-[#081225] text-[#eef4fb] font-[family-name:var(--font-archivo)]">
         {children}
+        <Analytics />
       </body>
     </html>
   );
