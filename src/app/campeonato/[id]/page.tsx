@@ -11,7 +11,7 @@ import {
 } from '@/lib/constants'
 import type { MatchForCal, InitPred } from './calendario/calendario-view'
 import type { GroupStanding } from './tablas/tablas-view'
-import type { Participant, ResultMatch, PredsByMatch } from './resultados/resultados-view'
+import type { Participant, ResultMatch, PredsByMatch, GroupPredEntry } from './resultados/resultados-view'
 import { ChampionshipApp } from './championship-app'
 
 type Props = { params: Promise<{ id: string }> }
@@ -77,6 +77,7 @@ export default async function CampeonatoPage({ params }: Props) {
     { data: rawParticipants },
     { data: rawFeaturedMatches },
     { data: rawOtherMemberships },
+    { data: rawAllGroupPreds },
   ] = await Promise.all([
     // Datos globales — leídos con service role (RLS bloquea matches al usuario regular)
     admin.from('groups').select('id, name').order('name'),
@@ -138,6 +139,12 @@ export default async function CampeonatoPage({ params }: Props) {
       .select('championship_id, championships(id, name)')
       .eq('user_id', user.id)
       .neq('championship_id', id),
+
+    // Predicciones de clasificación de grupo de TODOS los participantes (para tab Resultados)
+    admin
+      .from('group_predictions')
+      .select('user_id, group_id, first_place, second_place, third_place, fourth_place')
+      .eq('championship_id', id),
   ])
 
   // ── Join manual ───────────────────────────────────────────────────────────
@@ -352,6 +359,22 @@ export default async function CampeonatoPage({ params }: Props) {
     })
     .filter((c): c is { id: string; name: string } => c !== null)
 
+  // ── Predicciones de clasificación de grupos (todos los participantes) ─────────
+  // Solo incluye filas con los 4 lugares confirmados.
+  const groupPredEntries: GroupPredEntry[] = (rawAllGroupPreds ?? [])
+    .filter(gp => gp.first_place != null && gp.second_place != null && gp.third_place != null && gp.fourth_place != null)
+    .map(gp => ({
+      userId:    gp.user_id as string,
+      groupId:   gp.group_id as number,
+      groupName: groupNameMap.get(gp.group_id as number) ?? '',
+      places: [
+        teamNameMap.get(gp.first_place  as number) ?? '',
+        teamNameMap.get(gp.second_place as number) ?? '',
+        teamNameMap.get(gp.third_place  as number) ?? '',
+        teamNameMap.get(gp.fourth_place as number) ?? '',
+      ] as [string, string, string, string],
+    }))
+
   return (
     <ChampionshipApp
       championshipId={id}
@@ -381,6 +404,8 @@ export default async function CampeonatoPage({ params }: Props) {
       resultMatches={resultMatches}
       predsByMatch={predsByMatch}
       hasTodayMatches={hasTodayMatches}
+      groupPredEntries={groupPredEntries}
+      modGroupStandings={championship.mod_group_standings}
       otherChampionships={otherChampionships}
     />
   )

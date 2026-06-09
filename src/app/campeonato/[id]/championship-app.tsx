@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { EspecialesView, type GroupWithTeams, type PlayerRow, type TeamRow } from './especiales/view'
 import { CalendarioView, type MatchForCal, type InitPred } from './calendario/calendario-view'
 import { TablaView, type GroupStanding } from './tablas/tablas-view'
-import { ResultadosView, type Participant, type ResultMatch, type PredsByMatch } from './resultados/resultados-view'
+import { ResultadosView, type Participant, type ResultMatch, type PredsByMatch, type GroupPredEntry } from './resultados/resultados-view'
 
 type Props = {
   championshipId: string
@@ -47,6 +47,8 @@ type Props = {
   resultMatches: ResultMatch[]
   predsByMatch: PredsByMatch
   hasTodayMatches: boolean
+  groupPredEntries: GroupPredEntry[]
+  modGroupStandings: boolean
   otherChampionships: { id: string; name: string }[]
 }
 
@@ -75,6 +77,8 @@ export function ChampionshipApp({
   resultMatches,
   predsByMatch,
   hasTodayMatches,
+  groupPredEntries,
+  modGroupStandings,
   otherChampionships,
 }: Props) {
   const router = useRouter()
@@ -176,6 +180,10 @@ export function ChampionshipApp({
           predsByMatch={predsByMatch}
           userPredMatchIds={confirmedMatchIds}
           hasTodayMatches={hasTodayMatches}
+          groupPredEntries={groupPredEntries}
+          modGroupStandings={modGroupStandings}
+          isClassificationLocked={isClassificationLocked}
+          classificationLockLabel={classificationLockLabel}
         />
       </div>
 

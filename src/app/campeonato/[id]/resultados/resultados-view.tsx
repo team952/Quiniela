@@ -31,6 +31,14 @@ export type ResultMatch = {
 
 export type PredsByMatch = Record<number, Record<string, { s1: number | null; s2: number | null }>>
 
+/** Predicción confirmada de orden de grupo para un participante (todos los lugares no-nulos). */
+export type GroupPredEntry = {
+  userId: string
+  groupId: number
+  groupName: string
+  places: [string, string, string, string]  // [1°, 2°, 3°, 4°] — nombres de equipo
+}
+
 type Props = {
   participants: Participant[]
   resultMatches: ResultMatch[]
@@ -38,6 +46,14 @@ type Props = {
   userPredMatchIds: Set<number>
   /** true si hoy hay al menos un partido con resultado → mostrar columna "+Jornada" */
   hasTodayMatches: boolean
+  /** Predicciones de clasificación de grupos de todos los participantes (solo confirmadas). */
+  groupPredEntries: GroupPredEntry[]
+  /** true si el módulo de clasificación por grupo está activo en este campeonato. */
+  modGroupStandings: boolean
+  /** true si ya pasó el cierre del módulo de clasificación (2026-06-11 00:00 ET). */
+  isClassificationLocked: boolean
+  /** Etiqueta legible de la fecha de cierre, p. ej. "11 jun 2026, 00:00 ET". */
+  classificationLockLabel: string
 }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -165,7 +181,7 @@ function MatchChip({ match, selected, onClick, hasPred }: {
 
 // ── ResultadosView ────────────────────────────────────────────────────────────
 
-export function ResultadosView({ participants, resultMatches, predsByMatch, userPredMatchIds, hasTodayMatches }: Props) {
+export function ResultadosView({ participants, resultMatches, predsByMatch, userPredMatchIds, hasTodayMatches, groupPredEntries, modGroupStandings, isClassificationLocked, classificationLockLabel }: Props) {
   // Fechas disponibles (días que tienen al menos un partido), en orden ASC
   const availableDates = useMemo(
     () => [...new Set(resultMatches.map(m => m.date))].sort(),
@@ -298,6 +314,9 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
       {availableDates.length === 0 ? (
         <>
           {leaderboard}
+          {modGroupStandings && (
+            <GroupClassSection entries={groupPredEntries} participants={participants} isLocked={isClassificationLocked} lockLabel={classificationLockLabel} />
+          )}
           <ScoringRules />
         </>
       ) : (
@@ -377,10 +396,197 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
             )}
           </div>
 
+          {modGroupStandings && (
+            <GroupClassSection entries={groupPredEntries} participants={participants} isLocked={isClassificationLocked} lockLabel={classificationLockLabel} />
+          )}
           <ScoringRules />
         </>
       )}
     </main>
+  )
+}
+
+// ── Pronósticos de clasificación de grupos ────────────────────────────────────
+
+const PLACE_COLORS = ['#f7c948', '#b0b8c1', '#cd7f32', 'var(--mut2)'] as const
+const PLACE_LABELS = ['1°', '2°', '3°', '4°'] as const
+
+function GroupClassSection({ entries, participants, isLocked, lockLabel }: {
+  entries: GroupPredEntry[]
+  participants: Participant[]
+  isLocked: boolean
+  lockLabel: string
+}) {
+  // Grupos únicos con predicciones, ordenados por nombre
+  const groups = useMemo(() => {
+    const seen = new Map<number, string>()
+    for (const e of entries) if (!seen.has(e.groupId)) seen.set(e.groupId, e.groupName)
+    return [...seen.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [entries])
+
+  const [selectedGroupId, setSelectedGroupId] = useState<number>(() => groups[0]?.id ?? 0)
+
+  // Participantes del grupo seleccionado, en el mismo orden que el leaderboard
+  const rows = useMemo(() => {
+    const byUser = new Map(entries.filter(e => e.groupId === selectedGroupId).map(e => [e.userId, e]))
+    return participants
+      .filter(p => byUser.has(p.userId))
+      .map(p => ({ ...p, places: byUser.get(p.userId)!.places }))
+  }, [entries, selectedGroupId, participants])
+
+  const selectedGroup = groups.find(g => g.id === selectedGroupId)
+  const groupColor = selectedGroup ? (GROUP_COLORS[selectedGroup.name] ?? '#5b8cff') : '#5b8cff'
+  const groupLetter = selectedGroup ? selectedGroup.name.replace('Group ', '') : ''
+
+  return (
+    <section style={{ marginTop: '10px' }}>
+      {/* Header */}
+      <div className="lb-head" style={{ marginBottom: '12px' }}>
+        <span className="lb-ico">📋</span> Pronósticos: clasificación de grupos
+      </div>
+
+      {/* Antes del cierre: solo aviso */}
+      {!isLocked && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          background: 'linear-gradient(135deg,rgba(92,139,255,0.10),rgba(124,92,255,0.08))',
+          border: '1px solid rgba(92,139,255,0.20)',
+          borderRadius: '12px',
+          padding: '14px 16px',
+          marginBottom: '4px',
+        }}>
+          <span style={{ fontSize: '20px', flexShrink: 0 }}>🔒</span>
+          <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5, color: 'var(--mut)' }}>
+            Los pronósticos de clasificación de cada participante se revelarán el{' '}
+            <strong style={{ color: '#fff' }}>{lockLabel}</strong>,
+            cuando cierre este módulo.
+          </p>
+        </div>
+      )}
+
+      {/* Después del cierre: tabla completa */}
+      {isLocked && (
+        <>
+          {/* Selector de grupos — scrollable en móvil */}
+      <div style={{ position: 'relative', marginBottom: '14px' }}>
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '32px', background: 'linear-gradient(90deg,transparent,var(--bg))', pointerEvents: 'none', zIndex: 1 }} />
+        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px', paddingRight: '32px', scrollbarWidth: 'none' as const }}>
+          {groups.map(g => {
+            const gc = GROUP_COLORS[g.name] ?? '#5b8cff'
+            const active = g.id === selectedGroupId
+            const letter = g.name.replace('Group ', '')
+            return (
+              <button
+                key={g.id}
+                onClick={() => setSelectedGroupId(g.id)}
+                style={{
+                  flexShrink: 0,
+                  padding: '5px 12px',
+                  borderRadius: '99px',
+                  fontFamily: 'var(--font-archivo),Archivo,sans-serif',
+                  fontWeight: 900,
+                  fontSize: '12px',
+                  letterSpacing: '.06em',
+                  cursor: 'pointer',
+                  border: active ? `1.5px solid ${gc}` : '1px solid rgba(255,255,255,0.1)',
+                  background: active ? `color-mix(in srgb,${gc} 18%,#0d1b32)` : 'var(--card2)',
+                  color: active ? gc : 'var(--mut)',
+                  transition: '.13s',
+                }}
+              >
+                {letter}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Tabla de predicciones del grupo */}
+      <div style={{
+        background: 'linear-gradient(180deg,#0f2040,#0a1628)',
+        border: `1px solid color-mix(in srgb,${groupColor} 30%,rgba(255,255,255,0.06))`,
+        borderRadius: '14px',
+        overflow: 'hidden',
+      }}>
+        {/* Encabezado del grupo */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '10px 14px 8px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-anton),Anton,sans-serif',
+            fontSize: '13px', letterSpacing: '.08em', textTransform: 'uppercase' as const,
+            color: groupColor,
+          }}>
+            Grupo {groupLetter}
+          </span>
+          <span style={{ fontSize: '10px', color: 'var(--mut2)', fontWeight: 700 }}>
+            · {rows.length} {rows.length === 1 ? 'pronóstico' : 'pronósticos'}
+          </span>
+        </div>
+
+        {/* Cabecera de columnas */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr repeat(4, 54px)',
+          padding: '6px 14px',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+        }}>
+          <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase' as const, color: 'var(--mut2)' }}>Participante</span>
+          {PLACE_LABELS.map((lbl, i) => (
+            <span key={lbl} style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '.04em', textAlign: 'center' as const, color: PLACE_COLORS[i] }}>{lbl}</span>
+          ))}
+        </div>
+
+        {/* Filas */}
+        {rows.length === 0 ? (
+          <div style={{ padding: '18px 14px', color: 'var(--mut2)', fontSize: '13px', textAlign: 'center' as const }}>
+            Nadie ha pronosticado este grupo aún
+          </div>
+        ) : rows.map((r, idx) => (
+          <div
+            key={r.userId}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr repeat(4, 54px)',
+              padding: '9px 14px',
+              borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : undefined,
+              background: r.isCurrentUser ? 'rgba(255,255,255,0.03)' : undefined,
+            }}
+          >
+            {/* Nombre */}
+            <span style={{
+              fontWeight: 700, fontSize: '13px', color: 'var(--txt)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}>
+              {r.displayName}
+              {r.isCurrentUser && <em style={{ fontSize: '11px', color: 'var(--mut2)', fontStyle: 'italic' as const }}>· tú</em>}
+            </span>
+
+            {/* 4 equipos en orden */}
+            {r.places.map((teamName, pi) => (
+              <div key={pi} style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px' }}>
+                <img
+                  src={`https://flagcdn.com/w40/${flagCode(teamName)}.png`}
+                  alt={esName(teamName)}
+                  loading="lazy"
+                  style={{ width: '26px', height: '17px', objectFit: 'cover', borderRadius: '2px', outline: '1px solid rgba(255,255,255,.12)' }}
+                />
+                <span style={{ fontSize: '8px', fontWeight: 700, color: 'var(--mut)', letterSpacing: '.02em', textAlign: 'center' as const, lineHeight: 1.1, maxWidth: '48px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                  {esName(teamName)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+        </>
+      )}
+    </section>
   )
 }
 
