@@ -197,11 +197,17 @@ export function ChampionshipApp({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
       .subscribe()
 
+    // Red de seguridad: si el canal Realtime pierde la conexión o un evento
+    // (puede pasar por límites del plan free), mientras haya partidos hoy
+    // refrescamos igual cada 30s.
+    const fallback = hasTodayMatches ? setInterval(() => router.refresh(), 30000) : null
+
     return () => {
       if (timeoutId !== null) clearTimeout(timeoutId)
+      if (fallback !== null) clearInterval(fallback)
       supabase.removeChannel(channel)
     }
-  }, [championshipId, router])
+  }, [championshipId, router, hasTodayMatches])
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
   // Arranca con las predicciones cargadas del servidor y crece cuando el usuario confirma.
