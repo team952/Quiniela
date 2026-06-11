@@ -177,9 +177,16 @@ export function ChampionshipApp({
 
   // ── Realtime — refresca la vista cuando el polling de resultados en vivo
   // (y su cascada de puntuación) actualiza matches/standings/predictions/championship_users.
+  // Si el canal se cae (corte de red, límite del plan free), se reconecta solo
+  // y al reconectar pide un refresh único para ponerse al día — sin pollear
+  // por tiempo, para no gastar datos de quienes tienen internet limitado.
   useEffect(() => {
     const supabase = createClient()
     let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let reconnectId: ReturnType<typeof setTimeout> | null = null
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    let cancelled = false
+    let hadError = false
 
     function scheduleRefresh() {
       if (timeoutId !== null) clearTimeout(timeoutId)
@@ -189,25 +196,37 @@ export function ChampionshipApp({
       }, 1000)
     }
 
-    const channel = supabase
-      .channel(`live-updates-${championshipId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, scheduleRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'standings' }, scheduleRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'championship_users', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
-      .subscribe()
+    function connect() {
+      channel = supabase
+        .channel(`live-updates-${championshipId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, scheduleRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'standings' }, scheduleRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'championship_users', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
+        .subscribe((status) => {
+          if (cancelled) return
+          if (status === 'SUBSCRIBED') {
+            if (hadError) {
+              hadError = false
+              router.refresh()
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            hadError = true
+            if (channel) supabase.removeChannel(channel)
+            reconnectId = setTimeout(connect, 3000)
+          }
+        })
+    }
 
-    // Red de seguridad: si el canal Realtime pierde la conexión o un evento
-    // (puede pasar por límites del plan free), mientras haya partidos hoy
-    // refrescamos igual cada 30s.
-    const fallback = hasTodayMatches ? setInterval(() => router.refresh(), 30000) : null
+    connect()
 
     return () => {
+      cancelled = true
       if (timeoutId !== null) clearTimeout(timeoutId)
-      if (fallback !== null) clearInterval(fallback)
-      supabase.removeChannel(channel)
+      if (reconnectId !== null) clearTimeout(reconnectId)
+      if (channel) supabase.removeChannel(channel)
     }
-  }, [championshipId, router, hasTodayMatches])
+  }, [championshipId, router])
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
   // Arranca con las predicciones cargadas del servidor y crece cuando el usuario confirma.
