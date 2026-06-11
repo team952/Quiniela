@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { EspecialesView, type GroupWithTeams, type PlayerRow, type TeamRow } from './especiales/view'
 import { CalendarioView, type MatchForCal, type InitPred } from './calendario/calendario-view'
@@ -54,6 +54,17 @@ type Props = {
 
 type Tab = 'esp' | 'cal' | 'grp' | 'res'
 
+// Momentos del vídeo de fondo del hero (vidfondo.mp4) asociados a cada pestaña.
+const TAB_VIDEO_TIME: Record<Tab, number> = {
+  esp: 0,
+  cal: 0.417,
+  grp: 0.917,
+  res: 1.5,
+}
+
+// vidfondo.mp4 está a 24 fps.
+const FRAME_STEP = 1 / 24
+
 export function ChampionshipApp({
   championshipId,
   userId,
@@ -83,6 +94,69 @@ export function ChampionshipApp({
 }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('cal')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoCleanupRef = useRef<(() => void) | null>(null)
+
+  // Recorre el vídeo fotograma a fotograma desde su posición actual hasta
+  // `target`, hacia delante o hacia atrás según corresponda, sin loops ni
+  // rodeos. Cada paso espera al evento `seeked` antes de pedir el siguiente
+  // fotograma, para que se vea correr en vez de saltar con retardo.
+  function seekVideoTo(target: number) {
+    const video = videoRef.current
+    if (!video) return
+
+    videoCleanupRef.current?.()
+    videoCleanupRef.current = null
+    video.pause()
+
+    const start = video.currentTime
+    const dir = target > start ? 1 : target < start ? -1 : 0
+    if (dir === 0) return
+
+    function onSeeked() {
+      const t = video!.currentTime
+      const reached = dir > 0 ? t >= target - 0.001 : t <= target + 0.001
+      if (reached) {
+        if (Math.abs(t - target) > 0.001) video!.currentTime = target
+        finish()
+        return
+      }
+      const next = t + dir * FRAME_STEP
+      const overshoot = dir > 0 ? next >= target : next <= target
+      video!.currentTime = overshoot ? target : next
+    }
+
+    function finish() {
+      video!.removeEventListener('seeked', onSeeked)
+      videoCleanupRef.current = null
+    }
+
+    video.addEventListener('seeked', onSeeked)
+    videoCleanupRef.current = () => video.removeEventListener('seeked', onSeeked)
+
+    const first = start + dir * FRAME_STEP
+    const overshootFirst = dir > 0 ? first >= target : first <= target
+    video.currentTime = overshootFirst ? target : first
+  }
+
+  useEffect(() => {
+    return () => {
+      videoCleanupRef.current?.()
+    }
+  }, [])
+
+  function selectTab(next: Tab) {
+    setTab(next)
+    seekVideoTo(TAB_VIDEO_TIME[next])
+  }
+
+  function handleVideoLoaded() {
+    const video = videoRef.current
+    if (video) {
+      video.pause()
+      video.currentTime = TAB_VIDEO_TIME[tab]
+    }
+  }
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
   // Arranca con las predicciones cargadas del servidor y crece cuando el usuario confirma.
@@ -99,6 +173,15 @@ export function ChampionshipApp({
       {/* ── Hero — imagen fija que no cambia al navegar tabs ── */}
       <header className="hero">
         <div className="hero-art" role="img" aria-label={`Campeonato ${championshipName}`}>
+          <video
+            ref={videoRef}
+            className="hero-video"
+            src="/quiniela/vidfondo.mp4"
+            muted
+            playsInline
+            preload="auto"
+            onLoadedMetadata={handleVideoLoaded}
+          />
           {/* Overlay con nombre del campeonato */}
           <div className="hero-info">
             <p className="hero-champ-label">Campeonato</p>
@@ -112,16 +195,16 @@ export function ChampionshipApp({
 
       {/* ── Tabs de navegación ── */}
       <div className="tabs">
-        <button className={'tab' + (tab === 'esp' ? ' on' : '')} onClick={() => setTab('esp')}>
+        <button className={'tab' + (tab === 'esp' ? ' on' : '')} onClick={() => selectTab('esp')}>
           Especiales
         </button>
-        <button className={'tab' + (tab === 'cal' ? ' on' : '')} onClick={() => setTab('cal')}>
+        <button className={'tab' + (tab === 'cal' ? ' on' : '')} onClick={() => selectTab('cal')}>
           Calendario
         </button>
-        <button className={'tab' + (tab === 'grp' ? ' on' : '')} onClick={() => setTab('grp')}>
+        <button className={'tab' + (tab === 'grp' ? ' on' : '')} onClick={() => selectTab('grp')}>
           Tablas de grupo
         </button>
-        <button className={'tab' + (tab === 'res' ? ' on' : '')} onClick={() => setTab('res')}>
+        <button className={'tab' + (tab === 'res' ? ' on' : '')} onClick={() => selectTab('res')}>
           Resultados
         </button>
         {isCreator && (

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "load-players": "tsx scripts/load-players.ts",
     "load-players:dry": "tsx scripts/load-players.ts --dry-run",
     "load-players:teams": "tsx scripts/load-players.ts --show-teams",
@@ -32,6 +34,7 @@
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }

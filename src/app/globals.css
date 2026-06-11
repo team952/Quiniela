@@ -50,6 +50,11 @@ body {
   background-size: cover; background-position: center 42%;
   position: relative;
 }
+.hero-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center 42%;
+}
 .hero-art::after {
   content: ""; position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none;
   background: linear-gradient(180deg, rgba(7,11,22,.35) 0%, transparent 25%, transparent 48%, rgba(7,11,22,.82) 82%, var(--bg) 100%);
