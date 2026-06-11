@@ -103,15 +103,29 @@ export function ChampionshipApp({
   const bgRef = useRef<HTMLImageElement>(null)
   const bgFrameRef = useRef(TAB_FRAME['cal'])
   const bgCleanupRef = useRef<(() => void) | null>(null)
+  const frameUrlsRef = useRef<string[]>([])
 
-  // Precarga las 61 imágenes de la secuencia para que el cambio de fotograma
-  // (cada ~33ms) sea instantáneo y sin parpadeos.
+  // Precarga las 61 imágenes como blob URLs en memoria: así el cambio de
+  // fotograma (cada ~33ms) es instantáneo, sin depender de la latencia de
+  // red de cada `<img src>` (en local los ficheros se sirven al instante,
+  // pero desplegado cada cambio de src dispara una petición y los fotogramas
+  // intermedios nunca llegan a pintarse).
   useEffect(() => {
-    for (let i = 0; i < TOTAL_FRAMES; i++) {
-      const img = new window.Image()
-      img.src = frameSrc(i)
+    let cancelled = false
+    Promise.all(
+      Array.from({ length: TOTAL_FRAMES }, (_, i) =>
+        fetch(frameSrc(i))
+          .then(res => res.blob())
+          .then(blob => {
+            if (!cancelled) frameUrlsRef.current[i] = URL.createObjectURL(blob)
+          })
+      )
+    )
+    return () => {
+      cancelled = true
+      bgCleanupRef.current?.()
+      frameUrlsRef.current.forEach(url => url && URL.revokeObjectURL(url))
     }
-    return () => bgCleanupRef.current?.()
   }, [])
 
   // Recorre la secuencia de fotogramas desde el actual hasta `target`, hacia
@@ -127,12 +141,20 @@ export function ChampionshipApp({
     const dir = target > start ? 1 : target < start ? -1 : 0
     if (dir === 0) return
 
+    // Si los fotogramas aún no están cacheados en memoria, salta directo
+    // al destino sin animar (evita el "tirón" mientras carga la secuencia).
+    if (!frameUrlsRef.current[target]) {
+      bgFrameRef.current = target
+      img.src = frameSrc(target)
+      return
+    }
+
     let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     function step() {
       const next = bgFrameRef.current + dir
       bgFrameRef.current = next
-      img!.src = frameSrc(next)
+      img!.src = frameUrlsRef.current[next] ?? frameSrc(next)
       if (next === target) {
         bgCleanupRef.current = null
         return
