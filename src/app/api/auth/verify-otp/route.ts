@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
+// next.config.ts fija basePath: '/quiniela'. NextResponse.redirect() en un
+// route handler NO antepone el basePath automáticamente (a diferencia de
+// redirects desde proxy.ts), y request.nextUrl.basePath llega vacío aquí —
+// hay que prefijarlo a mano o el redirect cae fuera de /quiniela y da 404.
+const BASE_PATH = '/quiniela'
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const email    = (formData.get('email') as string) ?? ''
@@ -24,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     const url = request.nextUrl.clone()
-    url.pathname = request.nextUrl.basePath + '/login'
+    url.pathname = BASE_PATH + '/login'
     const params = new URLSearchParams({ otp_error: '1', email })
     if (nextPath !== '/') params.set('next', nextPath)
     url.search = params.toString()
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone()
-  url.pathname = request.nextUrl.basePath + nextPath
+  url.pathname = BASE_PATH + nextPath
   url.search = ''
   const resp = NextResponse.redirect(url, { status: 303 })
   pending.forEach(({ name, value, options }) =>
