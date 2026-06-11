@@ -394,14 +394,30 @@ export function CalendarioView({ championshipId, matches, initialPredictions, on
     setCopying(false)
     if (res.error) {
       setCopyResult({ ok: false, msg: res.error })
-    } else {
-      setCopyResult({ ok: true, msg: `✓ ${res.copied} pronósticos copiados${res.skipped ? ` · ${res.skipped} omitidos (bloqueados)` : ''}` })
-      startTransition(() => {
-        for (const p of res.predictions) {
-          patch(p.matchId, { s1: String(p.score1), s2: String(p.score2), confirmed: true })
-          onPredictionConfirmed?.(p.matchId)
-        }
-      })
+      return
+    }
+
+    const parts: string[] = []
+    if (res.copiedMatches > 0) parts.push(`${res.copiedMatches} resultado${res.copiedMatches === 1 ? '' : 's'} de partido${res.copiedMatches === 1 ? '' : 's'}`)
+    if (res.copiedGroups  > 0) parts.push(`clasificación de ${res.copiedGroups} grupo${res.copiedGroups === 1 ? '' : 's'}`)
+    if (res.copiedSpecials)    parts.push('especiales (podio/bota de oro/MVP)')
+
+    let msg = `✓ Copiado: ${parts.join(', ')}`
+    if (res.skippedMatches) msg += ` · ${res.skippedMatches} partido${res.skippedMatches === 1 ? '' : 's'} omitido${res.skippedMatches === 1 ? '' : 's'} (bloqueado${res.skippedMatches === 1 ? '' : 's'})`
+    setCopyResult({ ok: true, msg })
+
+    startTransition(() => {
+      for (const p of res.predictions) {
+        patch(p.matchId, { s1: String(p.score1), s2: String(p.score2), confirmed: true })
+        onPredictionConfirmed?.(p.matchId)
+      }
+    })
+
+    // La clasificación por grupo y los especiales viven en la pestaña
+    // Especiales, cuyo estado inicial se carga una sola vez desde el
+    // servidor — recargamos para que reflejen lo recién copiado.
+    if (res.copiedGroups > 0 || res.copiedSpecials) {
+      setTimeout(() => window.location.reload(), 1200)
     }
   }
 
