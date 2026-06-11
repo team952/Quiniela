@@ -96,6 +96,7 @@ export function ChampionshipApp({
   const [tab, setTab] = useState<Tab>('cal')
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoCleanupRef = useRef<(() => void) | null>(null)
+  const videoInteractedRef = useRef(false)
 
   // Recorre el vídeo fotograma a fotograma desde su posición actual hasta
   // `target`, hacia delante o hacia atrás según corresponda, sin loops ni
@@ -107,6 +108,7 @@ export function ChampionshipApp({
 
     videoCleanupRef.current?.()
     videoCleanupRef.current = null
+    videoInteractedRef.current = true
     video.pause()
 
     const start = video.currentTime
@@ -150,7 +152,13 @@ export function ChampionshipApp({
     seekVideoTo(TAB_VIDEO_TIME[next])
   }
 
-  function handleVideoLoaded() {
+  // En móvil (sobre todo iOS) el vídeo no decodifica/buffera fotogramas hasta
+  // que se reproduce al menos una vez, aunque tenga preload="auto". Dejamos
+  // que el clip (autoplay, mudo, ~2s) se reproduzca entero una vez al cargar
+  // para forzar el buffering completo, y al terminar lo dejamos fijo en el
+  // fotograma de la pestaña activa (salvo que el usuario ya haya interactuado).
+  function handleVideoReady() {
+    if (videoInteractedRef.current) return
     const video = videoRef.current
     if (video) {
       video.pause()
@@ -179,8 +187,9 @@ export function ChampionshipApp({
             src="/quiniela/vidfondo.mp4"
             muted
             playsInline
+            autoPlay
             preload="auto"
-            onLoadedMetadata={handleVideoLoaded}
+            onEnded={handleVideoReady}
           />
           {/* Overlay con nombre del campeonato */}
           <div className="hero-info">
