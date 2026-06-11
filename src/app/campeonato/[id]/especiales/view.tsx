@@ -478,6 +478,27 @@ export function EspecialesView({
     [championshipId],
   )
 
+  // "Confirmar" bloquea los 12 grupos a la vez, así que guarda el orden
+  // de TODOS (no solo el grupo seleccionado en pantalla) para no dejar
+  // grupos sin guardar con su orden por defecto.
+  const saveAllGroupOrders = useCallback(
+    async () => {
+      setSaveStatus('saving')
+      const results = await Promise.all(
+        groups.map((g) => {
+          const ordered = groupOrders.get(g.id) ?? []
+          return saveGroupPredictionAction(
+            championshipId, g.id,
+            ordered[0]?.id ?? null, ordered[1]?.id ?? null,
+            ordered[2]?.id ?? null, ordered[3]?.id ?? null,
+          )
+        }),
+      )
+      flash(results.every((r) => !r.error))
+    },
+    [championshipId, groups, groupOrders],
+  )
+
   const saveSpecial = useCallback(
     async (patch: Partial<SpecialPrediction>) => {
       setSaveStatus('saving')
@@ -602,7 +623,7 @@ export function EspecialesView({
                 canConfirm={true}
                 onConfirm={() => {
                   setOrdenConfirmed(true)
-                  if (currentGroupData) saveGroupOrder(currentGroupData.id, currentOrder)
+                  saveAllGroupOrders()
                 }}
                 onEdit={() => setOrdenConfirmed(false)}
                 hint="Confirma el orden de los 12 grupos"

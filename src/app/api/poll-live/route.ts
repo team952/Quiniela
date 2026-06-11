@@ -77,9 +77,11 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 3. Obtener partidos del día desde football-data.org ────────────────────
-  // Pedimos los dos días por seguridad (si un partido de ayer no tiene resultado aún)
+  // football-data.org filtra por utcDate (UTC), no por fecha ET. Un partido
+  // nocturno de hoy en ET (p. ej. 22:00 ET) cae en el día UTC SIGUIENTE, así
+  // que ampliamos el rango un día en cada extremo para no perdernos esos casos.
   const fdRes = await fetch(
-    `${FD_BASE}/competitions/WC/matches?dateFrom=${yesterdayET}&dateTo=${todayET}`,
+    `${FD_BASE}/competitions/WC/matches?dateFrom=${yesterdayET}&dateTo=${addDaysToISODate(todayET, 1)}`,
     {
       headers: { 'X-Auth-Token': FD_KEY },
       // No cache — siempre queremos datos frescos
@@ -174,4 +176,11 @@ export async function GET(req: NextRequest) {
 
 function toETDate(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d)
+}
+
+function addDaysToISODate(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
 }

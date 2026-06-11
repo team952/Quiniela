@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { EspecialesView, type GroupWithTeams, type PlayerRow, type TeamRow } from './especiales/view'
 import { CalendarioView, type MatchForCal, type InitPred } from './calendario/calendario-view'
 import { TablaView, type GroupStanding } from './tablas/tablas-view'
@@ -173,6 +174,34 @@ export function ChampionshipApp({
     setTab(next)
     seekFrameTo(TAB_FRAME[next])
   }
+
+  // ── Realtime — refresca la vista cuando el polling de resultados en vivo
+  // (y su cascada de puntuación) actualiza matches/standings/predictions/championship_users.
+  useEffect(() => {
+    const supabase = createClient()
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    function scheduleRefresh() {
+      if (timeoutId !== null) clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        timeoutId = null
+        router.refresh()
+      }, 1000)
+    }
+
+    const channel = supabase
+      .channel(`live-updates-${championshipId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'standings' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'championship_users', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions', filter: `championship_id=eq.${championshipId}` }, scheduleRefresh)
+      .subscribe()
+
+    return () => {
+      if (timeoutId !== null) clearTimeout(timeoutId)
+      supabase.removeChannel(channel)
+    }
+  }, [championshipId, router])
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
   // Arranca con las predicciones cargadas del servidor y crece cuando el usuario confirma.
