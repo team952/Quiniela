@@ -64,6 +64,7 @@ const TAB_VIDEO_TIME: Record<Tab, number> = {
 
 // vidfondo.mp4 está a 24 fps.
 const FRAME_STEP = 1 / 24
+const FRAME_DURATION_MS = 1000 / 24
 
 export function ChampionshipApp({
   championshipId,
@@ -94,14 +95,16 @@ export function ChampionshipApp({
 }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('cal')
+  const [videoReady, setVideoReady] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoCleanupRef = useRef<(() => void) | null>(null)
   const videoInteractedRef = useRef(false)
 
   // Recorre el vídeo fotograma a fotograma desde su posición actual hasta
   // `target`, hacia delante o hacia atrás según corresponda, sin loops ni
-  // rodeos. Cada paso espera al evento `seeked` antes de pedir el siguiente
-  // fotograma, para que se vea correr en vez de saltar con retardo.
+  // rodeos. El ritmo se marca con un temporizador a la velocidad real del
+  // vídeo (24 fps) en vez de encadenar por el evento `seeked`: en Safari
+  // ese evento se dispara casi al instante y los fotogramas pasaban volando.
   function seekVideoTo(target: number) {
     const video = videoRef.current
     if (!video) return
@@ -109,36 +112,34 @@ export function ChampionshipApp({
     videoCleanupRef.current?.()
     videoCleanupRef.current = null
     videoInteractedRef.current = true
+    setVideoReady(true)
     video.pause()
 
     const start = video.currentTime
     const dir = target > start ? 1 : target < start ? -1 : 0
     if (dir === 0) return
 
-    function onSeeked() {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    function step() {
       const t = video!.currentTime
       const reached = dir > 0 ? t >= target - 0.001 : t <= target + 0.001
       if (reached) {
         if (Math.abs(t - target) > 0.001) video!.currentTime = target
-        finish()
+        videoCleanupRef.current = null
         return
       }
       const next = t + dir * FRAME_STEP
       const overshoot = dir > 0 ? next >= target : next <= target
       video!.currentTime = overshoot ? target : next
+      timeoutId = setTimeout(step, FRAME_DURATION_MS)
     }
 
-    function finish() {
-      video!.removeEventListener('seeked', onSeeked)
-      videoCleanupRef.current = null
+    videoCleanupRef.current = () => {
+      if (timeoutId !== null) clearTimeout(timeoutId)
     }
 
-    video.addEventListener('seeked', onSeeked)
-    videoCleanupRef.current = () => video.removeEventListener('seeked', onSeeked)
-
-    const first = start + dir * FRAME_STEP
-    const overshootFirst = dir > 0 ? first >= target : first <= target
-    video.currentTime = overshootFirst ? target : first
+    step()
   }
 
   useEffect(() => {
@@ -164,6 +165,7 @@ export function ChampionshipApp({
       video.pause()
       video.currentTime = TAB_VIDEO_TIME[tab]
     }
+    setVideoReady(true)
   }
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
@@ -183,7 +185,7 @@ export function ChampionshipApp({
         <div className="hero-art" role="img" aria-label={`Campeonato ${championshipName}`}>
           <video
             ref={videoRef}
-            className="hero-video"
+            className={'hero-video' + (videoReady ? ' ready' : '')}
             src="/quiniela/vidfondo.mp4"
             muted
             playsInline
