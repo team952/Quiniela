@@ -54,17 +54,21 @@ type Props = {
 
 type Tab = 'esp' | 'cal' | 'grp' | 'res'
 
-// Momentos del vídeo de fondo del hero (vidfondo.mp4) asociados a cada pestaña.
-const TAB_VIDEO_TIME: Record<Tab, number> = {
+// Fotogramas clave de la secuencia de fondo del hero
+// (public/sec/Reducido00..60.jpg, 61 imágenes a 30 fps) asociados a cada pestaña.
+const TAB_FRAME: Record<Tab, number> = {
   esp: 0,
-  cal: 0.417,
-  grp: 0.917,
-  res: 1.5,
+  cal: 15,
+  grp: 25,
+  res: 60,
 }
 
-// vidfondo.mp4 está a 24 fps.
-const FRAME_STEP = 1 / 24
-const FRAME_DURATION_MS = 1000 / 24
+const TOTAL_FRAMES = 61
+const FRAME_DURATION_MS = 1000 / 30
+
+function frameSrc(frame: number) {
+  return `/quiniela/sec/Reducido${String(frame).padStart(2, '0')}.jpg`
+}
 
 export function ChampionshipApp({
   championshipId,
@@ -95,77 +99,57 @@ export function ChampionshipApp({
 }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('cal')
-  const [videoReady, setVideoReady] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const videoCleanupRef = useRef<(() => void) | null>(null)
-  const videoInteractedRef = useRef(false)
+  const [bgReady, setBgReady] = useState(false)
+  const bgRef = useRef<HTMLImageElement>(null)
+  const bgFrameRef = useRef(TAB_FRAME['cal'])
+  const bgCleanupRef = useRef<(() => void) | null>(null)
 
-  // Recorre el vídeo fotograma a fotograma desde su posición actual hasta
-  // `target`, hacia delante o hacia atrás según corresponda, sin loops ni
-  // rodeos. El ritmo se marca con un temporizador a la velocidad real del
-  // vídeo (24 fps) en vez de encadenar por el evento `seeked`: en Safari
-  // ese evento se dispara casi al instante y los fotogramas pasaban volando.
-  function seekVideoTo(target: number) {
-    const video = videoRef.current
-    if (!video) return
+  // Precarga las 61 imágenes de la secuencia para que el cambio de fotograma
+  // (cada ~33ms) sea instantáneo y sin parpadeos.
+  useEffect(() => {
+    for (let i = 0; i < TOTAL_FRAMES; i++) {
+      const img = new window.Image()
+      img.src = frameSrc(i)
+    }
+    return () => bgCleanupRef.current?.()
+  }, [])
 
-    videoCleanupRef.current?.()
-    videoCleanupRef.current = null
-    videoInteractedRef.current = true
-    setVideoReady(true)
-    video.pause()
+  // Recorre la secuencia de fotogramas desde el actual hasta `target`, hacia
+  // delante o hacia atrás según corresponda, sin saltos ni loops.
+  function seekFrameTo(target: number) {
+    const img = bgRef.current
+    if (!img) return
 
-    const start = video.currentTime
+    bgCleanupRef.current?.()
+    bgCleanupRef.current = null
+
+    const start = bgFrameRef.current
     const dir = target > start ? 1 : target < start ? -1 : 0
     if (dir === 0) return
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     function step() {
-      const t = video!.currentTime
-      const reached = dir > 0 ? t >= target - 0.001 : t <= target + 0.001
-      if (reached) {
-        if (Math.abs(t - target) > 0.001) video!.currentTime = target
-        videoCleanupRef.current = null
+      const next = bgFrameRef.current + dir
+      bgFrameRef.current = next
+      img!.src = frameSrc(next)
+      if (next === target) {
+        bgCleanupRef.current = null
         return
       }
-      const next = t + dir * FRAME_STEP
-      const overshoot = dir > 0 ? next >= target : next <= target
-      video!.currentTime = overshoot ? target : next
       timeoutId = setTimeout(step, FRAME_DURATION_MS)
     }
 
-    videoCleanupRef.current = () => {
+    bgCleanupRef.current = () => {
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
 
     step()
   }
 
-  useEffect(() => {
-    return () => {
-      videoCleanupRef.current?.()
-    }
-  }, [])
-
   function selectTab(next: Tab) {
     setTab(next)
-    seekVideoTo(TAB_VIDEO_TIME[next])
-  }
-
-  // En móvil (sobre todo iOS) el vídeo no decodifica/buffera fotogramas hasta
-  // que se reproduce al menos una vez, aunque tenga preload="auto". Dejamos
-  // que el clip (autoplay, mudo, ~2s) se reproduzca entero una vez al cargar
-  // para forzar el buffering completo, y al terminar lo dejamos fijo en el
-  // fotograma de la pestaña activa (salvo que el usuario ya haya interactuado).
-  function handleVideoReady() {
-    if (videoInteractedRef.current) return
-    const video = videoRef.current
-    if (video) {
-      video.pause()
-      video.currentTime = TAB_VIDEO_TIME[tab]
-    }
-    setVideoReady(true)
+    seekFrameTo(TAB_FRAME[next])
   }
 
   // Set de matchIds con pronóstico confirmado — compartido entre Calendario y Resultados.
@@ -180,18 +164,15 @@ export function ChampionshipApp({
   return (
     <div className="wrap">
 
-      {/* ── Hero — imagen fija que no cambia al navegar tabs ── */}
+      {/* ── Hero — fondo animado en sincronía con las pestañas ── */}
       <header className="hero">
         <div className="hero-art" role="img" aria-label={`Campeonato ${championshipName}`}>
-          <video
-            ref={videoRef}
-            className={'hero-video' + (videoReady ? ' ready' : '')}
-            src="/quiniela/vidfondo.mp4"
-            muted
-            playsInline
-            autoPlay
-            preload="auto"
-            onEnded={handleVideoReady}
+          <img
+            ref={bgRef}
+            className={'hero-bg' + (bgReady ? ' ready' : '')}
+            src={frameSrc(TAB_FRAME['cal'])}
+            alt=""
+            onLoad={() => setBgReady(true)}
           />
           {/* Overlay con nombre del campeonato */}
           <div className="hero-info">
