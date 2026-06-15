@@ -56,19 +56,24 @@ type Props = {
 type Tab = 'esp' | 'cal' | 'grp' | 'res'
 
 // Fotogramas clave de la secuencia de fondo del hero
-// (public/sec/Reducido00..60.jpg, 61 imágenes a 30 fps) asociados a cada pestaña.
+// (public/sec/Reducido00..59.jpg, 60 imágenes a 30 fps) asociados a cada pestaña.
 const TAB_FRAME: Record<Tab, number> = {
   esp: 0,
-  cal: 15,
+  cal: 17,
   grp: 25,
-  res: 60,
+  res: 59,
 }
 
-const TOTAL_FRAMES = 61
+const TOTAL_FRAMES = 60
 const FRAME_DURATION_MS = 1000 / 30
 
+// Subir este número cada vez que se reemplacen las imágenes de public/sec/:
+// cambia la URL y evita que el navegador siga sirviendo las versiones
+// anteriores desde caché con el mismo nombre de archivo.
+const FRAME_ASSET_VERSION = 2
+
 function frameSrc(frame: number) {
-  return `/quiniela/sec/Reducido${String(frame).padStart(2, '0')}.jpg`
+  return `/quiniela/sec/Reducido${String(frame).padStart(2, '0')}.jpg?v=${FRAME_ASSET_VERSION}`
 }
 
 export function ChampionshipApp({
@@ -102,9 +107,17 @@ export function ChampionshipApp({
   const [tab, setTab] = useState<Tab>('cal')
   const [bgReady, setBgReady] = useState(false)
   const bgRef = useRef<HTMLImageElement>(null)
-  const bgFrameRef = useRef(TAB_FRAME['cal'])
+  const bgFrameRef = useRef(0)
   const bgCleanupRef = useRef<(() => void) | null>(null)
   const frameUrlsRef = useRef<string[]>([])
+
+  // El <img> del fondo viene en el HTML servido por SSR: si ya termina de
+  // cargar antes de que React hidrate y registre `onLoad`, ese evento nativo
+  // se pierde y `bgReady` nunca pasa a true. Si al montar ya está completa,
+  // la marcamos lista directamente.
+  useEffect(() => {
+    if (bgRef.current?.complete) setBgReady(true)
+  }, [])
 
   // Precarga las 61 imágenes como blob URLs en memoria: así el cambio de
   // fotograma (cada ~33ms) es instantáneo, sin depender de la latencia de
@@ -246,7 +259,7 @@ export function ChampionshipApp({
           <img
             ref={bgRef}
             className={'hero-bg' + (bgReady ? ' ready' : '')}
-            src={frameSrc(TAB_FRAME['cal'])}
+            src={frameSrc(0)}
             alt=""
             onLoad={() => setBgReady(true)}
           />

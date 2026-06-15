@@ -46,7 +46,6 @@ body {
 .hero { position: relative; margin: 0 -18px 0; }
 .hero-art {
   width: 100%; height: clamp(190px, 30vw, 360px);
-  background-image: url('/quiniela/hero-quiniela.jpg');
   background-size: cover; background-position: center 42%;
   position: relative;
 }
