@@ -330,6 +330,7 @@ export function ChampionshipApp({
           initialPredictions={initialMatchPredictions}
           onPredictionConfirmed={handlePredictionConfirmed}
           otherChampionships={otherChampionships}
+          isActive={tab === 'cal'}
         />
       </div>
 

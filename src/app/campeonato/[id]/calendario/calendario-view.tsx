@@ -9,7 +9,7 @@
  * concepto de "bloqueado por fecha" sin alterar el look & feel.
  */
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect, useRef } from 'react'
 import { savePrediction, copyPredictions } from './actions'
 import { flagCode, esName } from '@/lib/teams-data'
 
@@ -43,6 +43,8 @@ type Props = {
   onPredictionConfirmed?: (matchId: number) => void
   /** Otros campeonatos del usuario — si hay alguno, se habilita "Copiar pronósticos" */
   otherChampionships: { id: string; name: string }[]
+  /** true cuando esta pestaña es la visible — dispara el scroll al primer pendiente */
+  isActive: boolean
 }
 
 // ── Constantes copiadas del handoff ───────────────────────────────────────────
@@ -374,12 +376,38 @@ function MatchCard({
 
 // ── CalendarioView ────────────────────────────────────────────────────────────
 
-export function CalendarioView({ championshipId, matches, initialPredictions, onPredictionConfirmed, otherChampionships }: Props) {
+export function CalendarioView({ championshipId, matches, initialPredictions, onPredictionConfirmed, otherChampionships, isActive }: Props) {
   const [preds,   setPreds]  = useState(() => buildInitialPreds(initialPredictions))
   const [filter,  setFilter] = useState('all')
   const [saving,  setSaving] = useState<number | null>(null)
   const [errors,  setErrors] = useState<Map<number, string>>(new Map())
   const [, startTransition]  = useTransition()
+
+  // Fecha local de hoy en formato YYYY-MM-DD (para comparar con match.date)
+  const today = useMemo(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }, [])
+
+  // Fecha del primer día con al menos un partido pendiente desde hoy
+  const firstPendingDate = useMemo(() => {
+    for (const m of matches) {
+      if (m.date < today) continue
+      if (m.isLocked || !m.teamsResolved) continue
+      if (!(preds.get(m.id)?.confirmed)) return m.date
+    }
+    return null
+  }, [matches, today, preds])
+
+  const pendingRef = useRef<HTMLElement>(null)
+
+  // Cuando la pestaña se activa, desplazar al primer partido pendiente
+  useEffect(() => {
+    if (!isActive) return
+    requestAnimationFrame(() => {
+      pendingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [isActive])
 
   // ── Copiar pronósticos ───────────────────────────────────────────────────────
   const [copySourceId, setCopySourceId] = useState<string>('')
@@ -664,7 +692,7 @@ export function CalendarioView({ championshipId, matches, initialPredictions, on
 
             const dl = dayLabel(date)
             sections.push(
-              <section className="day" key={date}>
+              <section className="day" key={date} ref={date === firstPendingDate ? pendingRef : undefined}>
                 <div className="day-head">
                   <div className="dnum">{dl.d}</div>
                   <div className="dtxt">
