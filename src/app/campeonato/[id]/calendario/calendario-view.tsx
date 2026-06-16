@@ -409,6 +409,16 @@ export function CalendarioView({ championshipId, matches, initialPredictions, on
     })
   }, [isActive])
 
+  // Botón "Inicio": visible solo cuando hay scroll suficiente hacia abajo
+  const [showTopBtn, setShowTopBtn] = useState(false)
+  useEffect(() => {
+    if (!isActive) { setShowTopBtn(false); return }
+    function onScroll() { setShowTopBtn(window.scrollY > 200) }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [isActive])
+
   // ── Copiar pronósticos ───────────────────────────────────────────────────────
   const [copySourceId, setCopySourceId] = useState<string>('')
   const [copying,      setCopying]      = useState(false)
@@ -737,20 +747,21 @@ export function CalendarioView({ championshipId, matches, initialPredictions, on
         )}
       </main>
 
-      {/* Botón flotante "volver al inicio" — solo visible cuando esta pestaña está activa */}
-      {isActive && (
+      {/* Botón flotante "volver al inicio" — centro-arriba, aparece solo al hacer scroll */}
+      {showTopBtn && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           aria-label="Volver al inicio"
           style={{
             position: 'fixed',
-            bottom: '88px',
-            right: '16px',
+            top: '14px',
+            left: '50%',
+            transform: 'translateX(-50%)',
             zIndex: 50,
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '9px 14px 9px 11px',
+            padding: '9px 16px 9px 12px',
             borderRadius: '99px',
             border: '1px solid rgba(255,255,255,0.13)',
             background: 'rgba(10,16,32,0.90)',
@@ -762,7 +773,8 @@ export function CalendarioView({ championshipId, matches, initialPredictions, on
             fontSize: '12px',
             letterSpacing: '.05em',
             cursor: 'pointer',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.55)',
+            whiteSpace: 'nowrap',
           }}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
