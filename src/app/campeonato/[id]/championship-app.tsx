@@ -104,7 +104,7 @@ export function ChampionshipApp({
   otherChampionships,
 }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('cal')
+  const [tab, setTab] = useState<Tab>('res')
   const [bgReady, setBgReady] = useState(false)
   const bgRef = useRef<HTMLImageElement>(null)
   const bgFrameRef = useRef(0)

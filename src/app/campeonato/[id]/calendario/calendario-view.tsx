@@ -736,6 +736,44 @@ export function CalendarioView({ championshipId, matches, initialPredictions, on
           </p>
         )}
       </main>
+
+      {/* Botón flotante "volver al inicio" — solo visible cuando esta pestaña está activa */}
+      {isActive && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Volver al inicio"
+          style={{
+            position: 'fixed',
+            bottom: '88px',
+            right: '16px',
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 14px 9px 11px',
+            borderRadius: '99px',
+            border: '1px solid rgba(255,255,255,0.13)',
+            background: 'rgba(10,16,32,0.90)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            color: '#b8cde8',
+            fontFamily: 'var(--font-archivo),Archivo,sans-serif',
+            fontWeight: 800,
+            fontSize: '12px',
+            letterSpacing: '.05em',
+            cursor: 'pointer',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+          Inicio
+        </button>
+      )}
     </div>
   )
 }
