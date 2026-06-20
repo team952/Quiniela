@@ -307,6 +307,14 @@ async function recalcOnePair(
   championshipId: string,
   userId: string,
 ): Promise<string | null> {
+  // Módulo eliminatoria: si está desactivado, los partidos knockout no suman a knockout_points
+  const { data: champ } = await supabase
+    .from('championships')
+    .select('mod_knockout_matches')
+    .eq('id', championshipId)
+    .single()
+  const modKnockoutMatches = (champ?.mod_knockout_matches as boolean | null) ?? false
+
   // Todas las predictions no-null de este par
   const { data: preds, error: predsErr } = await supabase
     .from('predictions')
@@ -346,7 +354,7 @@ async function recalcOnePair(
     const pts = (p.points_earned as number) ?? 0
     const phase = phaseMap.get(p.match_id as number) ?? ''
     if (phase === 'group') groupPoints += pts
-    else knockoutPoints += pts
+    else if (modKnockoutMatches) knockoutPoints += pts
   }
 
   // Sumar group_predictions (clasificación por grupo → se suma a group_points)

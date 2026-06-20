@@ -39,6 +39,18 @@ export async function savePrediction(
   if (matchErr || !match) return { error: 'Partido no encontrado.' }
   if (isMatchLocked(match.kickoff_utc as string | null)) return { error: 'Este partido ya está bloqueado.' }
 
+  // Verificar que el campeonato tiene el módulo eliminatoria activo si el partido es knockout
+  if ((match.phase as string) !== 'group') {
+    const { data: champ } = await admin
+      .from('championships')
+      .select('mod_knockout_matches')
+      .eq('id', championshipId)
+      .single()
+    if (!champ?.mod_knockout_matches) {
+      return { error: 'Los pronósticos de fase eliminatoria no están habilitados en este campeonato.' }
+    }
+  }
+
   // 3. Upsert con service role — user_id viene del servidor (nunca del cliente)
   const { error } = await admin.from('predictions').upsert(
     {
@@ -94,7 +106,7 @@ export async function copyPredictions(
   // Módulos activos del campeonato de destino
   const { data: targetChamp } = await admin
     .from('championships')
-    .select('mod_group_standings, mod_podium, mod_golden_boot, mod_mvp')
+    .select('mod_group_standings, mod_podium, mod_golden_boot, mod_mvp, mod_knockout_matches')
     .eq('id', targetChampionshipId)
     .single()
 
@@ -114,17 +126,22 @@ export async function copyPredictions(
   if (sourcePreds?.length) {
     const matchIds = sourcePreds.map(p => p.match_id as number)
     const { data: matchRows } = await admin
-      .from('matches').select('id, kickoff_utc').in('id', matchIds)
+      .from('matches').select('id, kickoff_utc, phase').in('id', matchIds)
 
     const kickoffMap = new Map<number, string | null>(
       (matchRows ?? []).map(m => [m.id as number, m.kickoff_utc as string | null]),
+    )
+    const phaseMap = new Map<number, string>(
+      (matchRows ?? []).map(m => [m.id as number, m.phase as string]),
     )
 
     const toInsert: { match_id: number; score1: number; score2: number }[] = []
 
     for (const p of sourcePreds) {
       const kickoff = kickoffMap.get(p.match_id as number)
+      const phase = phaseMap.get(p.match_id as number) ?? 'group'
       if (kickoff === undefined || isMatchLocked(kickoff)) { skippedMatches++; continue }
+      if (phase !== 'group' && !targetChamp?.mod_knockout_matches) { skippedMatches++; continue }
       toInsert.push({ match_id: p.match_id as number, score1: p.score1 as number, score2: p.score2 as number })
     }
 

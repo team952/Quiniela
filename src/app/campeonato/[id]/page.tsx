@@ -303,11 +303,13 @@ export default async function CampeonatoPage({ params }: Props) {
 
   const { data: todayMatchRows } = await admin
     .from('matches')
-    .select('id')
+    .select('id, phase')
     .eq('date', todayET)
     .not('score1', 'is', null)   // solo los que ya tienen resultado
 
-  const todayMatchIds = (todayMatchRows ?? []).map(m => m.id as number)
+  const todayMatchIds = (todayMatchRows ?? [])
+    .filter(m => (m.phase as string) === 'group' || championship.mod_knockout_matches)
+    .map(m => m.id as number)
   const todayPtsMap: Record<string, number> = {}
 
   if (todayMatchIds.length > 0) {
@@ -406,6 +408,7 @@ export default async function CampeonatoPage({ params }: Props) {
       hasTodayMatches={hasTodayMatches}
       groupPredEntries={groupPredEntries}
       modGroupStandings={championship.mod_group_standings}
+      modKnockoutMatches={championship.mod_knockout_matches}
       otherChampionships={otherChampionships}
     />
   )

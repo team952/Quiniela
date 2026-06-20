@@ -50,6 +50,7 @@ type Props = {
   hasTodayMatches: boolean
   groupPredEntries: GroupPredEntry[]
   modGroupStandings: boolean
+  modKnockoutMatches: boolean
   otherChampionships: { id: string; name: string }[]
 }
 
@@ -101,6 +102,7 @@ export function ChampionshipApp({
   hasTodayMatches,
   groupPredEntries,
   modGroupStandings,
+  modKnockoutMatches,
   otherChampionships,
 }: Props) {
   const router = useRouter()
@@ -347,6 +349,7 @@ export function ChampionshipApp({
           hasTodayMatches={hasTodayMatches}
           groupPredEntries={groupPredEntries}
           modGroupStandings={modGroupStandings}
+          modKnockoutMatches={modKnockoutMatches}
           isClassificationLocked={isClassificationLocked}
           classificationLockLabel={classificationLockLabel}
         />

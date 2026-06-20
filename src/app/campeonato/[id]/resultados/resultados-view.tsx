@@ -50,6 +50,8 @@ type Props = {
   groupPredEntries: GroupPredEntry[]
   /** true si el módulo de clasificación por grupo está activo en este campeonato. */
   modGroupStandings: boolean
+  /** true si el módulo de pronósticos de eliminatoria está activo en este campeonato. */
+  modKnockoutMatches: boolean
   /** true si ya pasó el cierre del módulo de clasificación (2026-06-11 00:00 ET). */
   isClassificationLocked: boolean
   /** Etiqueta legible de la fecha de cierre, p. ej. "11 jun 2026, 00:00 ET". */
@@ -181,7 +183,7 @@ function MatchChip({ match, selected, onClick, hasPred }: {
 
 // ── ResultadosView ────────────────────────────────────────────────────────────
 
-export function ResultadosView({ participants, resultMatches, predsByMatch, userPredMatchIds, hasTodayMatches, groupPredEntries, modGroupStandings, isClassificationLocked, classificationLockLabel }: Props) {
+export function ResultadosView({ participants, resultMatches, predsByMatch, userPredMatchIds, hasTodayMatches, groupPredEntries, modGroupStandings, modKnockoutMatches, isClassificationLocked, classificationLockLabel }: Props) {
   // Fechas disponibles (días que tienen al menos un partido), en orden ASC
   const availableDates = useMemo(
     () => [...new Set(resultMatches.map(m => m.date))].sort(),
@@ -257,14 +259,30 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
           <col />
           <col style={{ width: '50px' }} />
           {hasTodayMatches && <col style={{ width: '40px' }} />}
-          <col style={{ width: '50px' }} />
+          {modKnockoutMatches ? (
+            <>
+              <col style={{ width: '42px' }} />
+              <col style={{ width: '38px' }} />
+              <col style={{ width: '46px' }} />
+            </>
+          ) : (
+            <col style={{ width: '50px' }} />
+          )}
         </colgroup>
         <thead>
           <tr>
             <th className="l">Participante</th>
             <th style={{ textAlign:'center', padding:'10px 4px', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Pron.</th>
             {hasTodayMatches && <th style={{ color:'#4ade80', textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', fontWeight:800, letterSpacing:'.04em', textTransform:'uppercase' }}>Hoy</th>}
-            <th style={{ textAlign:'right', padding:'10px 8px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Pts</th>
+            {modKnockoutMatches ? (
+              <>
+                <th style={{ textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Grp</th>
+                <th style={{ textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', color:'#c46bff', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>KO</th>
+                <th style={{ textAlign:'right', padding:'10px 8px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Total</th>
+              </>
+            ) : (
+              <th style={{ textAlign:'right', padding:'10px 8px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Pts</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -290,8 +308,16 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
                   {r.todayPoints > 0 ? `+${r.todayPoints}` : '—'}
                 </td>
               )}
-              {/* Pts — 50px, mismo padding reducido */}
-              <td style={{ padding:'11px 8px 11px 0', textAlign:'right', borderTop:'1px solid var(--line)', color:'#fff', fontWeight:900, fontSize:'15px', fontFamily:'var(--font-archivo),Archivo,sans-serif' }}>{r.total}</td>
+              {/* Columnas de puntos */}
+              {modKnockoutMatches ? (
+                <>
+                  <td style={{ padding:'11px 4px 11px 0', textAlign:'right', borderTop:'1px solid var(--line)', color:'var(--mut)', fontWeight:800, fontSize:'13px', fontFamily:'var(--font-archivo),Archivo,sans-serif' }}>{r.groupPoints}</td>
+                  <td style={{ padding:'11px 4px 11px 0', textAlign:'right', borderTop:'1px solid var(--line)', color:'#c46bff', fontWeight:800, fontSize:'13px', fontFamily:'var(--font-archivo),Archivo,sans-serif' }}>{r.knockoutPoints}</td>
+                  <td style={{ padding:'11px 8px 11px 0', textAlign:'right', borderTop:'1px solid var(--line)', color:'#fff', fontWeight:900, fontSize:'15px', fontFamily:'var(--font-archivo),Archivo,sans-serif' }}>{r.total}</td>
+                </>
+              ) : (
+                <td style={{ padding:'11px 8px 11px 0', textAlign:'right', borderTop:'1px solid var(--line)', color:'#fff', fontWeight:900, fontSize:'15px', fontFamily:'var(--font-archivo),Archivo,sans-serif' }}>{r.total}</td>
+              )}
             </tr>
           ))}
         </tbody>
