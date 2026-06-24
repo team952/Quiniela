@@ -303,7 +303,7 @@ export default async function CampeonatoPage({ params }: Props) {
 
   const { data: todayMatchRows } = await admin
     .from('matches')
-    .select('id, phase')
+    .select('id, phase, group_id')
     .eq('date', todayET)
     .not('score1', 'is', null)   // solo los que ya tienen resultado
 
@@ -323,6 +323,34 @@ export default async function CampeonatoPage({ params }: Props) {
     for (const p of todayPreds ?? []) {
       const uid = p.user_id as string
       todayPtsMap[uid] = (todayPtsMap[uid] ?? 0) + ((p.points_earned as number) ?? 0)
+    }
+  }
+
+  // Puntos de clasificación de grupos cerrados HOY (solo si mod_group_standings activo)
+  if (championship.mod_group_standings) {
+    const todayGroupIds = [...new Set(
+      (todayMatchRows ?? [])
+        .filter(m => (m.phase as string) === 'group' && m.group_id)
+        .map(m => m.group_id as number),
+    )]
+
+    for (const groupId of todayGroupIds) {
+      // Verificar que el grupo esté 100% cerrado usando rawFeaturedMatches (ya disponible)
+      const groupMatchStatuses = (rawFeaturedMatches ?? []).filter(m => (m.group_id as number) === groupId)
+      const allFinished = groupMatchStatuses.length > 0 && groupMatchStatuses.every(m => (m.status as string) === 'finished')
+      if (!allFinished) continue
+
+      const { data: closedGP } = await admin
+        .from('group_predictions')
+        .select('user_id, points_earned')
+        .eq('championship_id', id)
+        .eq('group_id', groupId)
+        .not('points_earned', 'is', null)
+
+      for (const gp of closedGP ?? []) {
+        const uid = gp.user_id as string
+        todayPtsMap[uid] = (todayPtsMap[uid] ?? 0) + ((gp.points_earned as number) ?? 0)
+      }
     }
   }
 
