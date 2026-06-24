@@ -171,7 +171,7 @@ function MatchForm({ match }: { match: MatchRow }) {
         <p style={result.errors.length > 0 ? s.feedWarn : s.feedOk}>
           {result.errors.length > 0
             ? `⚠ ${result.errors[0]}`
-            : `✓ ${result.predictionsUpdated} pronósticos · ${result.usersUpdated} usuarios · ${result.standingsUpdated ? 'standings ✓' : ''}`
+            : `✓ ${result.predictionsUpdated} pronósticos · ${result.usersUpdated} usuarios${result.standingsUpdated ? ' · standings ✓' : ''}${result.groupPredictionsScored ? ' · clasificación ✓' : ''}`
           }
         </p>
       )}
@@ -238,7 +238,7 @@ function MatchCard({ match, teams }: { match: MatchRow; teams: { id: number; nam
 
 // ── AdminPanel — componente principal ─────────────────────────────────────────
 
-export function AdminPanel({ matches, teams }: { matches: MatchRow[]; teams: { id: number; name: string }[] }) {
+export function AdminPanel({ matches, teams, scoredGroups }: { matches: MatchRow[]; teams: { id: number; name: string }[]; scoredGroups: Set<string> }) {
   const [phaseFilter, setPhaseFilter] = useState<'all' | 'group' | 'knockout'>('all')
   const [groupFilter, setGroupFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'finished' | 'pending'>('all')
@@ -292,14 +292,15 @@ export function AdminPanel({ matches, teams }: { matches: MatchRow[]; teams: { i
           {groups.map(g => {
             const letter = g.replace('Group ', '')
             const color = GROUP_COLORS[g] ?? '#5b8cff'
+            const scored = scoredGroups.has(g)
             return (
               <button key={g} onClick={() => setGroupFilter(g)}
                 style={{
                   ...(groupFilter === g ? { ...s.groupChip, ...s.groupChipOn } : s.groupChip),
-                  borderColor: groupFilter === g ? color : undefined,
+                  borderColor: groupFilter === g ? color : scored ? 'rgba(74,222,128,0.35)' : undefined,
                   color: groupFilter === g ? color : undefined,
                 }}>
-                {letter}
+                {letter}{scored && <span style={s.scoredDot}>✓</span>}
               </button>
             )
           })}
@@ -369,6 +370,7 @@ const s = {
 
   btn: { alignSelf: 'flex-start', fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontWeight: 800, fontSize: '12px', letterSpacing: '0.04em', textTransform: 'uppercase' as const, padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'linear-gradient(180deg,#fbd75f,#e7af2e)', color: '#2a1d00', cursor: 'pointer', boxShadow: '0 4px 14px rgba(247,201,72,0.3)' },
 
+  scoredDot: { marginLeft: '4px', fontSize: '10px', color: '#4ade80', verticalAlign: 'middle' },
   feedOk:   { fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontSize: '12px', fontWeight: 700, color: '#4ade80', margin: 0 },
   feedWarn: { fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontSize: '12px', fontWeight: 700, color: '#f7c948', margin: 0 },
   feedError:{ fontFamily: 'var(--font-archivo), Archivo, sans-serif', fontSize: '12px', fontWeight: 700, color: '#e8434f', margin: 0 },

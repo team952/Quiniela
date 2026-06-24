@@ -66,6 +66,23 @@ export default async function SuperAdminResultadosPage() {
   const teamList = (teams ?? []).map(t => ({ id: t.id as number, name: t.name as string }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  // Grupos cuyos 6 partidos están todos finished = grupo puntuado
+  const matchCountByGroup = new Map<number, { total: number; finished: number }>()
+  for (const m of rawMatches ?? []) {
+    if (m.group_id) {
+      const cur = matchCountByGroup.get(m.group_id as number) ?? { total: 0, finished: 0 }
+      cur.total++
+      if ((m.status as string) === 'finished') cur.finished++
+      matchCountByGroup.set(m.group_id as number, cur)
+    }
+  }
+  const scoredGroups = new Set<string>(
+    [...matchCountByGroup.entries()]
+      .filter(([, c]) => c.total > 0 && c.finished === c.total)
+      .map(([gid]) => groupMap.get(gid) ?? '')
+      .filter(Boolean),
+  )
+
   return (
     <main style={{
       minHeight: '100dvh',
@@ -79,7 +96,7 @@ export default async function SuperAdminResultadosPage() {
         background: 'radial-gradient(ellipse at 50% 0%, rgba(232,67,79,0.14) 0%, transparent 70%)',
       }} aria-hidden />
 
-      <AdminPanel matches={matches} teams={teamList} />
+      <AdminPanel matches={matches} teams={teamList} scoredGroups={scoredGroups} />
     </main>
   )
 }

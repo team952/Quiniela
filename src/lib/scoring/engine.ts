@@ -35,12 +35,10 @@ export type EngineInput = {
 export type EngineResult = {
   matchId: number
   phase: string
-  /** true si se recalcularon standings de grupo */
   standingsUpdated: boolean
-  /** Cuántos predictions.points_earned fueron escritos */
   predictionsUpdated: number
-  /** Cuántos championship_users fueron actualizados */
   usersUpdated: number
+  groupPredictionsScored: boolean
   errors: string[]
 }
 
@@ -61,7 +59,7 @@ export async function processMatchResult(
     .single()
 
   if (matchFetchErr || !match) {
-    return { matchId, phase: '?', standingsUpdated: false, predictionsUpdated: 0, usersUpdated: 0, errors: [`Partido ${matchId} no encontrado: ${matchFetchErr?.message}`] }
+    return { matchId, phase: '?', standingsUpdated: false, predictionsUpdated: 0, usersUpdated: 0, groupPredictionsScored: false, errors: [`Partido ${matchId} no encontrado: ${matchFetchErr?.message}`] }
   }
 
   const phase = match.phase as string
@@ -79,7 +77,7 @@ export async function processMatchResult(
 
   if (updateMatchErr) {
     errors.push(`Update match: ${updateMatchErr.message}`)
-    return { matchId, phase, standingsUpdated: false, predictionsUpdated: 0, usersUpdated: 0, errors }
+    return { matchId, phase, standingsUpdated: false, predictionsUpdated: 0, usersUpdated: 0, groupPredictionsScored: false, errors }
   }
 
   // ── Paso 2: Recalcular standings (solo grupo) ─────────────────────────────
@@ -94,13 +92,24 @@ export async function processMatchResult(
     }
   }
 
+  // ── Paso 2b: Puntuar group_predictions si el grupo terminó ───────────────
+  let groupPredictionsScored = false
+  if (standingsUpdated && match.group_id) {
+    const complete = await isGroupComplete(supabase, match.group_id as number)
+    if (complete) {
+      const { errors: gpErrs } = await processGroupPredictions(supabase, match.group_id as number)
+      gpErrs.forEach(e => errors.push(e))
+      groupPredictionsScored = gpErrs.length === 0
+    }
+  }
+
   // ── Paso 3: Recalcular predictions.points_earned ──────────────────────────
   const predictionsUpdated = await recalcPredictions(supabase, matchId, score1, score2, errors)
 
   // ── Paso 4: Recalcular championship_users ────────────────────────────────
   const usersUpdated = await recalcUserPoints(supabase, matchId, errors)
 
-  return { matchId, phase, standingsUpdated, predictionsUpdated, usersUpdated, errors }
+  return { matchId, phase, standingsUpdated, predictionsUpdated, usersUpdated, groupPredictionsScored, errors }
 }
 
 // ── Paso 2: Standings desde cero ─────────────────────────────────────────────
@@ -173,6 +182,16 @@ async function recalcStandings(
   return upsertErr ? upsertErr.message : null
 }
 
+// ── Helper: grupo completo ────────────────────────────────────────────────────
+
+async function isGroupComplete(supabase: SupabaseClient, groupId: number): Promise<boolean> {
+  const [{ count: total }, { count: finished }] = await Promise.all([
+    supabase.from('matches').select('id', { count: 'exact', head: true }).eq('group_id', groupId),
+    supabase.from('matches').select('id', { count: 'exact', head: true }).eq('group_id', groupId).eq('status', 'finished'),
+  ])
+  return !!total && finished === total
+}
+
 // ── Paso 2b: Resolver placeholders de eliminatoria ───────────────────────────
 // Cuando un grupo termina (todos sus partidos en status='finished'), busca el 1°
 // y 2° en standings y rellena team1_id/team2_id de los partidos de R32 que usan
@@ -183,12 +202,7 @@ async function autoResolveKnockoutPlaceholders(
   supabase: SupabaseClient,
   groupId: number,
 ): Promise<string | null> {
-  // Solo actuar si el grupo está completo
-  const [{ count: total }, { count: finished }] = await Promise.all([
-    supabase.from('matches').select('id', { count: 'exact', head: true }).eq('group_id', groupId),
-    supabase.from('matches').select('id', { count: 'exact', head: true }).eq('group_id', groupId).eq('status', 'finished'),
-  ])
-  if (!total || finished !== total) return null
+  if (!await isGroupComplete(supabase, groupId)) return null
 
   // Letra del grupo ("Group A" → "A")
   const { data: group } = await supabase.from('groups').select('name').eq('id', groupId).single()
@@ -307,13 +321,14 @@ async function recalcOnePair(
   championshipId: string,
   userId: string,
 ): Promise<string | null> {
-  // Módulo eliminatoria: si está desactivado, los partidos knockout no suman a knockout_points
+  // Leer flags de módulos del campeonato
   const { data: champ } = await supabase
     .from('championships')
-    .select('mod_knockout_matches')
+    .select('mod_knockout_matches, mod_group_standings')
     .eq('id', championshipId)
     .single()
-  const modKnockoutMatches = (champ?.mod_knockout_matches as boolean | null) ?? false
+  const modKnockoutMatches  = (champ?.mod_knockout_matches  as boolean | null) ?? false
+  const modGroupStandings   = (champ?.mod_group_standings   as boolean | null) ?? false
 
   // Todas las predictions no-null de este par
   const { data: preds, error: predsErr } = await supabase
@@ -357,14 +372,16 @@ async function recalcOnePair(
     else if (modKnockoutMatches) knockoutPoints += pts
   }
 
-  // Sumar group_predictions (clasificación por grupo → se suma a group_points)
-  const { data: groupPreds } = await supabase
-    .from('group_predictions')
-    .select('points_earned')
-    .eq('championship_id', championshipId)
-    .eq('user_id', userId)
-    .not('points_earned', 'is', null)
-  for (const gp of groupPreds ?? []) groupPoints += (gp.points_earned as number) ?? 0
+  // Sumar group_predictions solo si el módulo está activo en este campeonato
+  if (modGroupStandings) {
+    const { data: groupPreds } = await supabase
+      .from('group_predictions')
+      .select('points_earned')
+      .eq('championship_id', championshipId)
+      .eq('user_id', userId)
+      .not('points_earned', 'is', null)
+    for (const gp of groupPreds ?? []) groupPoints += (gp.points_earned as number) ?? 0
+  }
 
   // Sumar special_predictions (podio/bota/MVP → se suma a knockout_points)
   const { data: specialPred } = await supabase
@@ -430,10 +447,23 @@ export async function processGroupPredictions(
   if (predsErr) return { updated: 0, errors: [predsErr.message] }
   if (!gPreds || gPreds.length === 0) return { updated: 0, errors: [] }
 
+  // Leer flags de módulo para cada campeonato presente (en batch)
+  const champIds = [...new Set(gPreds.map(gp => gp.championship_id as string))]
+  const { data: champs } = await supabase
+    .from('championships')
+    .select('id, mod_group_standings')
+    .in('id', champIds)
+  const modActiveMap = new Map(
+    (champs ?? []).map(c => [c.id as string, (c.mod_group_standings as boolean | null) ?? false]),
+  )
+
   let updated = 0
   const affectedPairs = new Set<string>()
 
   for (const gp of gPreds) {
+    // No puntuar si el módulo no está activo en ese campeonato
+    if (!modActiveMap.get(gp.championship_id as string)) continue
+
     const pred: [number | null, number | null, number | null, number | null] = [
       gp.first_place as number | null,
       gp.second_place as number | null,
