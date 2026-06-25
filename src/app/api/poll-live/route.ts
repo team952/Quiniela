@@ -23,7 +23,7 @@ const CRON_SECRET = process.env.CRON_SECRET ?? ''
 type FDScore = { home: number | null; away: number | null }
 type FDMatch = {
   id: number
-  status: 'SCHEDULED' | 'TIMED' | 'IN_PLAY' | 'PAUSED' | 'FINISHED' | 'POSTPONED' | 'CANCELLED'
+  status: 'SCHEDULED' | 'TIMED' | 'IN_PLAY' | 'LIVE' | 'PAUSED' | 'FINISHED' | 'POSTPONED' | 'CANCELLED'
   homeTeam: { name: string }
   awayTeam: { name: string }
   score: {
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
     const home = score.fullTime.home ?? 0
     const away = score.fullTime.away ?? 0
 
-    if (fdStatus === 'IN_PLAY' || fdStatus === 'PAUSED') {
+    if (fdStatus === 'IN_PLAY' || fdStatus === 'LIVE' || fdStatus === 'PAUSED') {
       // Partido en curso — actualizar marcador visible SIN cascade
       // (el motor de puntuación solo corre al finalizar)
       const sameScore = match.score1 === home && match.score2 === away
