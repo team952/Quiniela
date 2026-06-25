@@ -141,19 +141,22 @@ export function NuevoCampeonatoForm() {
             Elige qué categorías se pronostican en tu campeonato. Puedes activar o desactivar módulos después de crearlo, siempre que el plazo no haya vencido.
           </p>
 
-          {/* Resultados de grupos — siempre activo */}
-          <ModuleRow
-            label="Resultados fase de grupos"
-            desc="Pronostica el marcador de los 72 partidos de la fase de grupos. Cada partido cierra a las 00:00 ET de su día."
-            lockLine="Siempre activo"
-            checked
-            disabled
-            always
-          />
+          {/* Resultados de grupos — siempre activo, se oculta cuando la fase de grupos ya terminó */}
+          {!isModuleLocked(CLASSIFICATION_LOCK) && (
+            <>
+              <ModuleRow
+                label="Resultados fase de grupos"
+                desc="Pronostica el marcador de los 72 partidos de la fase de grupos. Cada partido cierra a las 00:00 ET de su día."
+                lockLine="Siempre activo"
+                checked
+                disabled
+                always
+              />
+              <div style={s.divider} />
+            </>
+          )}
 
-          <div style={s.divider} />
-
-          {OPTIONAL_MODULES.map((m) => {
+          {OPTIONAL_MODULES.filter(m => m.lock === null || !isModuleLocked(m.lock)).map((m) => {
             const checked = mods[m.key]
             let cantActivate: boolean
             let lockLine: string
