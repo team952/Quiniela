@@ -295,6 +295,15 @@ export default async function CampeonatoPage({ params }: Props) {
         s2: p.score2 as number | null,
       }
     }
+
+    // Anti-copia: solo mostrar pronósticos ajenos en partidos donde el propio
+    // usuario tiene pronóstico completo. Sin pronóstico propio = ven guiones.
+    predsByMatch = Object.fromEntries(
+      Object.entries(predsByMatch).filter(([mid]) => {
+        const mine = predsByMatch[Number(mid)]?.[user.id]
+        return mine !== undefined && mine.s1 !== null && mine.s2 !== null
+      }),
+    )
   }
 
   // ── Puntos de la jornada (partidos jugados HOY en America/New_York) ─────────
