@@ -37,7 +37,34 @@ export async function savePrediction(
     .single()
 
   if (matchErr || !match) return { error: 'Partido no encontrado.' }
-  if (isMatchLocked(match.kickoff_utc as string | null)) return { error: 'Este partido ya está bloqueado.' }
+
+  if ((match.phase as string) === 'knockout') {
+    if (isMatchLocked(match.kickoff_utc as string | null)) {
+      // Después de 00:00 ET: usuarios CON pronóstico bloqueados; sin pronóstico → ventana hasta primer kickoff
+      const { data: existingPred } = await admin
+        .from('predictions')
+        .select('score1, score2')
+        .eq('championship_id', championshipId)
+        .eq('user_id', user.id)
+        .eq('match_id', matchId)
+        .maybeSingle()
+      const hasPred = existingPred !== null && existingPred.score1 !== null && existingPred.score2 !== null
+      if (hasPred) return { error: 'Este partido ya está bloqueado.' }
+      // Sin pronóstico: verificar que no haya empezado el primer partido del día
+      const matchDateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+        .format(new Date(match.kickoff_utc as string))
+      const { data: dayMatches } = await admin
+        .from('matches')
+        .select('kickoff_utc')
+        .eq('phase', 'knockout')
+        .eq('date', matchDateET)
+        .not('kickoff_utc', 'is', null)
+      const firstMs = Math.min(...(dayMatches ?? []).map(dm => new Date(dm.kickoff_utc as string).getTime()))
+      if (Date.now() >= firstMs) return { error: 'Ya comenzó la jornada, no puedes añadir pronósticos.' }
+    }
+  } else {
+    if (isMatchLocked(match.kickoff_utc as string | null)) return { error: 'Este partido ya está bloqueado.' }
+  }
 
   // Verificar que el campeonato tiene el módulo eliminatoria activo si el partido es knockout
   if ((match.phase as string) !== 'group') {

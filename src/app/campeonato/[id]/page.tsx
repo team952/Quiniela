@@ -210,6 +210,25 @@ export default async function CampeonatoPage({ params }: Props) {
     (rawGroups ?? []).map((g) => [g.id as number, g.name as string]),
   )
 
+  // Predicciones propias del usuario por match_id (para calcular isLocked knockout)
+  const userPredMap = new Map<number, { s1: number | null; s2: number | null }>(
+    (rawMatchPreds ?? []).map(p => [
+      p.match_id as number,
+      { s1: p.score1 as number | null, s2: p.score2 as number | null },
+    ]),
+  )
+
+  // Primer kickoff de knockout por fecha ET (ventana rezagados = 00:00 → primer kickoff)
+  const firstKnockoutKickoffByDate = new Map<string, number>()
+  for (const m of rawMatches ?? []) {
+    if ((m.phase as string) !== 'knockout' || !m.kickoff_utc) continue
+    const dateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+      .format(new Date(m.kickoff_utc as string))
+    const ms = new Date(m.kickoff_utc as string).getTime()
+    const prev = firstKnockoutKickoffByDate.get(dateET)
+    if (prev === undefined || ms < prev) firstKnockoutKickoffByDate.set(dateET, ms)
+  }
+
   const groupMatches: MatchForCal[] = (rawMatches ?? [])
     .filter(m => m.phase === 'group' || championship.mod_knockout_matches)
     .map((m) => {
@@ -227,7 +246,19 @@ export default async function CampeonatoPage({ params }: Props) {
         team1Name:     t1 ?? (m.team1_placeholder as string | null) ?? '?',
         team2Name:     t2 ?? (m.team2_placeholder as string | null) ?? '?',
         teamsResolved: !!(m.team1_id && m.team2_id),
-        isLocked:      isMatchLocked(m.kickoff_utc as string | null),
+        isLocked:      (() => {
+          if ((m.phase as string) !== 'knockout') return isMatchLocked(m.kickoff_utc as string | null)
+          // Antes de 00:00 ET: libre para todos
+          if (!isMatchLocked(m.kickoff_utc as string | null)) return false
+          // Después de 00:00 ET: usuarios CON pronóstico quedan bloqueados
+          const myPred = userPredMap.get(m.id as number)
+          const hasPred = myPred !== undefined && myPred.s1 !== null && myPred.s2 !== null
+          if (hasPred) return true
+          // Sin pronóstico: bloqueado al primer kickoff del día
+          const dateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+            .format(new Date((m.kickoff_utc as string) ?? ''))
+          return Date.now() >= (firstKnockoutKickoffByDate.get(dateET) ?? Infinity)
+        })(),
       }
     })
 
@@ -296,12 +327,26 @@ export default async function CampeonatoPage({ params }: Props) {
       }
     }
 
-    // Anti-copia: solo mostrar pronósticos ajenos en partidos donde el propio
-    // usuario tiene pronóstico completo. Sin pronóstico propio = ven guiones.
+    // Anti-copia: ocultar pronósticos ajenos salvo que el usuario tenga predicción propia.
+    // Excepción knockout: tras el primer kickoff del día son visibles aunque no haya pronosticado.
+    const featuredMatchMeta = new Map<number, { phase: string; kickoffUtc: string | null }>(
+      (rawFeaturedMatches ?? []).map(m => [m.id as number, {
+        phase: m.phase as string,
+        kickoffUtc: m.kickoff_utc as string | null,
+      }]),
+    )
     predsByMatch = Object.fromEntries(
       Object.entries(predsByMatch).filter(([mid]) => {
         const mine = predsByMatch[Number(mid)]?.[user.id]
-        return mine !== undefined && mine.s1 !== null && mine.s2 !== null
+        const hasMine = mine !== undefined && mine.s1 !== null && mine.s2 !== null
+        if (hasMine) return true
+        const meta = featuredMatchMeta.get(Number(mid))
+        if (meta?.phase === 'knockout' && meta.kickoffUtc) {
+          const dateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+            .format(new Date(meta.kickoffUtc))
+          return Date.now() >= (firstKnockoutKickoffByDate.get(dateET) ?? Infinity)
+        }
+        return false
       }),
     )
   }
