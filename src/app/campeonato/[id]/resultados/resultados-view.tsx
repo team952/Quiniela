@@ -39,23 +39,34 @@ export type GroupPredEntry = {
   places: [string, string, string, string]  // [1°, 2°, 3°, 4°] — nombres de equipo
 }
 
+/** Pronósticos especiales de un participante (podio + bota de oro + MVP). */
+export type SpecialPredEntry = {
+  userId: string
+  goldTeamName: string | null
+  silverTeamName: string | null
+  bronzeTeamName: string | null
+  goldenBootPlayerName: string | null
+  mvpPlayerName: string | null
+}
+
 type Props = {
   participants: Participant[]
   resultMatches: ResultMatch[]
   predsByMatch: PredsByMatch
   userPredMatchIds: Set<number>
-  /** true si hoy hay al menos un partido con resultado → mostrar columna "+Jornada" */
   hasTodayMatches: boolean
-  /** Predicciones de clasificación de grupos de todos los participantes (solo confirmadas). */
   groupPredEntries: GroupPredEntry[]
-  /** true si el módulo de clasificación por grupo está activo en este campeonato. */
   modGroupStandings: boolean
-  /** true si el módulo de pronósticos de eliminatoria está activo en este campeonato. */
   modKnockoutMatches: boolean
-  /** true si ya pasó el cierre del módulo de clasificación (2026-06-11 00:00 ET). */
   isClassificationLocked: boolean
-  /** Etiqueta legible de la fecha de cierre, p. ej. "11 jun 2026, 00:00 ET". */
   classificationLockLabel: string
+  /** Pronósticos especiales de todos los participantes (vacío si el usuario no pronosticó). */
+  specialPredEntries: SpecialPredEntry[]
+  /** true si ya cerró el módulo de pronósticos especiales (28 jun 00:00 ET). */
+  isPodiumLocked: boolean
+  modPodium: boolean
+  modGoldenBoot: boolean
+  modMvp: boolean
 }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -183,7 +194,7 @@ function MatchChip({ match, selected, onClick, hasPred }: {
 
 // ── ResultadosView ────────────────────────────────────────────────────────────
 
-export function ResultadosView({ participants, resultMatches, predsByMatch, userPredMatchIds, hasTodayMatches, groupPredEntries, modGroupStandings, modKnockoutMatches, isClassificationLocked, classificationLockLabel }: Props) {
+export function ResultadosView({ participants, resultMatches, predsByMatch, userPredMatchIds, hasTodayMatches, groupPredEntries, modGroupStandings, modKnockoutMatches, isClassificationLocked, classificationLockLabel, specialPredEntries, isPodiumLocked, modPodium, modGoldenBoot, modMvp }: Props) {
   // Fechas disponibles (días que tienen al menos un partido), en orden ASC
   const availableDates = useMemo(
     () => [...new Set(resultMatches.map(m => m.date))].sort(),
@@ -340,8 +351,11 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
       {availableDates.length === 0 ? (
         <>
           {leaderboard}
-          {modGroupStandings && (
+          {!isPodiumLocked && modGroupStandings && (
             <GroupClassSection entries={groupPredEntries} participants={participants} isLocked={isClassificationLocked} lockLabel={classificationLockLabel} />
+          )}
+          {isPodiumLocked && (modPodium || modGoldenBoot || modMvp) && (
+            <SpecialesSection entries={specialPredEntries} participants={participants} modPodium={modPodium} modGoldenBoot={modGoldenBoot} modMvp={modMvp} />
           )}
           <ScoringRules />
         </>
@@ -422,8 +436,11 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
             )}
           </div>
 
-          {modGroupStandings && (
+          {!isPodiumLocked && modGroupStandings && (
             <GroupClassSection entries={groupPredEntries} participants={participants} isLocked={isClassificationLocked} lockLabel={classificationLockLabel} />
+          )}
+          {isPodiumLocked && (modPodium || modGoldenBoot || modMvp) && (
+            <SpecialesSection entries={specialPredEntries} participants={participants} modPodium={modPodium} modGoldenBoot={modGoldenBoot} modMvp={modMvp} />
           )}
           <ScoringRules />
         </>
@@ -611,6 +628,130 @@ function GroupClassSection({ entries, participants, isLocked, lockLabel }: {
         ))}
       </div>
         </>
+      )}
+    </section>
+  )
+}
+
+// ── Pronósticos especiales ────────────────────────────────────────────────────
+
+function TeamCell({ name }: { name: string | null }) {
+  if (!name) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontSize: '10px', color: 'var(--mut2)', fontWeight: 700 }}>—</span>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px' }}>
+      <img
+        src={`https://flagcdn.com/w40/${flagCode(name)}.png`}
+        alt={esName(name)}
+        loading="lazy"
+        style={{ width: '26px', height: '17px', objectFit: 'cover' as const, borderRadius: '2px', outline: '1px solid rgba(255,255,255,.12)' }}
+      />
+      <span style={{ fontSize: '8px', fontWeight: 700, color: 'var(--mut)', letterSpacing: '.02em', textAlign: 'center' as const, lineHeight: 1.1, maxWidth: '48px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+        {esName(name)}
+      </span>
+    </div>
+  )
+}
+
+function PlayerCell({ name }: { name: string | null }) {
+  return (
+    <span style={{
+      fontSize: '10px', fontWeight: 600,
+      color: name ? 'var(--txt)' : 'var(--mut2)',
+      textAlign: 'center' as const,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+      display: 'block', padding: '0 2px',
+    }}>
+      {name ?? '—'}
+    </span>
+  )
+}
+
+function SpecialesSection({ entries, participants, modPodium, modGoldenBoot, modMvp }: {
+  entries: SpecialPredEntry[]
+  participants: Participant[]
+  modPodium: boolean
+  modGoldenBoot: boolean
+  modMvp: boolean
+}) {
+  const entryByUser = new Map(entries.map(e => [e.userId, e]))
+  const rows = participants.map(p => ({ ...p, entry: entryByUser.get(p.userId) ?? null }))
+
+  const gridCols = [
+    '1fr',
+    ...(modPodium ? ['54px', '54px', '54px'] : []),
+    ...(modGoldenBoot ? ['72px'] : []),
+    ...(modMvp ? ['72px'] : []),
+  ].join(' ')
+
+  return (
+    <section style={{ marginTop: '10px' }}>
+      <div className="lb-head" style={{ marginBottom: '12px' }}>
+        <span className="lb-ico">🏆</span> Pronósticos especiales
+      </div>
+
+      {entries.length === 0 ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          background: 'linear-gradient(135deg,rgba(247,201,72,0.06),rgba(124,92,255,0.04))',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '12px', padding: '14px 16px',
+        }}>
+          <span style={{ fontSize: '20px', flexShrink: 0 }}>🔒</span>
+          <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5, color: 'var(--mut)' }}>
+            No participaste en los pronósticos especiales, por lo que no puedes ver los de los demás.
+          </p>
+        </div>
+      ) : (
+        <div style={{
+          background: 'linear-gradient(180deg,#0f2040,#0a1628)',
+          border: '1px solid rgba(247,201,72,0.18)',
+          borderRadius: '14px', overflow: 'hidden',
+        }}>
+          {/* Cabecera */}
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols, padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase' as const, color: 'var(--mut2)' }}>Participante</span>
+            {modPodium && <>
+              <span style={{ fontSize: '9px', fontWeight: 900, textAlign: 'center' as const, color: '#f7c948' }}>🥇</span>
+              <span style={{ fontSize: '9px', fontWeight: 900, textAlign: 'center' as const, color: '#b0b8c1' }}>🥈</span>
+              <span style={{ fontSize: '9px', fontWeight: 900, textAlign: 'center' as const, color: '#cd7f32' }}>🥉</span>
+            </>}
+            {modGoldenBoot && <span style={{ fontSize: '9px', fontWeight: 900, textAlign: 'center' as const, color: '#f7c948' }}>⚽ Bota</span>}
+            {modMvp && <span style={{ fontSize: '9px', fontWeight: 900, textAlign: 'center' as const, color: '#3dd5ff' }}>⭐ MVP</span>}
+          </div>
+
+          {/* Filas */}
+          {rows.map((r, idx) => (
+            <div
+              key={r.userId}
+              style={{
+                display: 'grid', gridTemplateColumns: gridCols,
+                padding: '9px 14px', alignItems: 'center',
+                borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : undefined,
+                background: r.isCurrentUser ? 'rgba(255,255,255,0.03)' : undefined,
+              }}
+            >
+              <span style={{
+                fontWeight: 700, fontSize: '13px', color: 'var(--txt)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+                {r.displayName}
+                {r.isCurrentUser && <em style={{ fontSize: '11px', color: 'var(--mut2)', fontStyle: 'italic' as const }}>· tú</em>}
+              </span>
+              {modPodium && <>
+                <TeamCell name={r.entry?.goldTeamName ?? null} />
+                <TeamCell name={r.entry?.silverTeamName ?? null} />
+                <TeamCell name={r.entry?.bronzeTeamName ?? null} />
+              </>}
+              {modGoldenBoot && <PlayerCell name={r.entry?.goldenBootPlayerName ?? null} />}
+              {modMvp && <PlayerCell name={r.entry?.mvpPlayerName ?? null} />}
+            </div>
+          ))}
+        </div>
       )}
     </section>
   )

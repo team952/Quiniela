@@ -443,6 +443,36 @@ export default async function CampeonatoPage({ params }: Props) {
     })
     .filter((c): c is { id: string; name: string } => c !== null)
 
+  // ── Pronósticos especiales de todos los participantes (post-cierre) ──────────
+  // Solo se cargan y muestran si ya cerró el módulo Y el usuario tiene los suyos.
+  const playerNameMap = new Map<number, string>(
+    (rawPlayers ?? []).map(p => [p.id as number, p.name as string]),
+  )
+  const userHasSpecialPred = specialPred != null && (
+    specialPred.gold_team_id != null ||
+    specialPred.silver_team_id != null ||
+    specialPred.bronze_team_id != null ||
+    specialPred.golden_boot_player_id != null ||
+    specialPred.mvp_player_id != null
+  )
+
+  let specialPredEntries: import('./resultados/resultados-view').SpecialPredEntry[] = []
+  if (isPodiumLocked && userHasSpecialPred) {
+    const { data: allSpecials } = await admin
+      .from('special_predictions')
+      .select('user_id, gold_team_id, silver_team_id, bronze_team_id, golden_boot_player_id, mvp_player_id')
+      .eq('championship_id', id)
+
+    specialPredEntries = (allSpecials ?? []).map(s => ({
+      userId:               s.user_id as string,
+      goldTeamName:         s.gold_team_id   ? (teamNameMap.get(s.gold_team_id   as number) ?? null) : null,
+      silverTeamName:       s.silver_team_id ? (teamNameMap.get(s.silver_team_id as number) ?? null) : null,
+      bronzeTeamName:       s.bronze_team_id ? (teamNameMap.get(s.bronze_team_id as number) ?? null) : null,
+      goldenBootPlayerName: s.golden_boot_player_id ? (playerNameMap.get(s.golden_boot_player_id as number) ?? null) : null,
+      mvpPlayerName:        s.mvp_player_id  ? (playerNameMap.get(s.mvp_player_id  as number) ?? null) : null,
+    }))
+  }
+
   // ── Predicciones de clasificación de grupos (todos los participantes) ─────────
   // Solo incluye filas con los 4 lugares confirmados.
   const groupPredEntries: GroupPredEntry[] = (rawAllGroupPreds ?? [])
@@ -492,6 +522,7 @@ export default async function CampeonatoPage({ params }: Props) {
       modGroupStandings={championship.mod_group_standings}
       modKnockoutMatches={championship.mod_knockout_matches}
       otherChampionships={otherChampionships}
+      specialPredEntries={specialPredEntries}
     />
   )
 }

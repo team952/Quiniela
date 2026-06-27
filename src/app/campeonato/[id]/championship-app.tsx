@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { EspecialesView, type GroupWithTeams, type PlayerRow, type TeamRow } from './especiales/view'
 import { CalendarioView, type MatchForCal, type InitPred } from './calendario/calendario-view'
 import { TablaView, type GroupStanding } from './tablas/tablas-view'
-import { ResultadosView, type Participant, type ResultMatch, type PredsByMatch, type GroupPredEntry } from './resultados/resultados-view'
+import { ResultadosView, type Participant, type ResultMatch, type PredsByMatch, type GroupPredEntry, type SpecialPredEntry } from './resultados/resultados-view'
 
 type Props = {
   championshipId: string
@@ -52,6 +52,7 @@ type Props = {
   modGroupStandings: boolean
   modKnockoutMatches: boolean
   otherChampionships: { id: string; name: string }[]
+  specialPredEntries: SpecialPredEntry[]
 }
 
 type Tab = 'esp' | 'cal' | 'grp' | 'res'
@@ -104,6 +105,7 @@ export function ChampionshipApp({
   modGroupStandings,
   modKnockoutMatches,
   otherChampionships,
+  specialPredEntries,
 }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('res')
@@ -352,6 +354,11 @@ export function ChampionshipApp({
           modKnockoutMatches={modKnockoutMatches}
           isClassificationLocked={isClassificationLocked}
           classificationLockLabel={classificationLockLabel}
+          specialPredEntries={specialPredEntries}
+          isPodiumLocked={isPodiumLocked}
+          modPodium={modules.podium}
+          modGoldenBoot={modules.goldenBoot}
+          modMvp={modules.mvp}
         />
       </div>
 
