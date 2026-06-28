@@ -65,10 +65,16 @@ export default async function CampeonatoPage({ params }: Props) {
 
   // ── Fetch de datos en paralelo ───────────────────────────────────────────
 
+  // isPodiumLocked se computa antes del Promise.all (es pura, no requiere BD)
+  // para decidir si hay que cargar la lista completa de jugadores.
+  const isPodiumLocked = isModuleLocked(PODIUM_BOOT_MVP_LOCK)
+  // Los jugadores solo se necesitan en la tab Especiales (selector bota/MVP).
+  // Una vez cerrado el módulo, el selector desaparece → no hace falta la lista completa.
+  const needAllPlayers = !isPodiumLocked && (championship.mod_golden_boot || championship.mod_mvp)
+
   const [
     { data: rawGroups },
     { data: rawTeams },
-    { data: rawPlayers },
     { data: groupPreds },
     { data: specialPred },
     { data: rawMatches },
@@ -82,11 +88,6 @@ export default async function CampeonatoPage({ params }: Props) {
     // Datos globales — leídos con service role (RLS bloquea matches al usuario regular)
     admin.from('groups').select('id, name').order('name'),
     admin.from('teams').select('id, name, group_id').order('name'),
-    // Dos batches para superar el límite de 1000 filas del servidor Supabase
-    Promise.all([
-      admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').range(0, 999),
-      admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').range(1000, 1999),
-    ]).then(([r1, r2]) => ({ data: [...(r1.data ?? []), ...(r2.data ?? [])], error: r1.error ?? r2.error })),
 
     // Datos del usuario — leídos con sesión del usuario (RLS garantiza privacidad)
     supabase
@@ -147,6 +148,14 @@ export default async function CampeonatoPage({ params }: Props) {
       .eq('championship_id', id),
   ])
 
+  // Jugadores: solo si el módulo está activo y el módulo aún no cerró (~140 KB/carga ahorrado)
+  const rawPlayers = needAllPlayers
+    ? await Promise.all([
+        admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').range(0, 999),
+        admin.from('players').select('id, name, club, position, team_id').order('team_id').order('name').range(1000, 1999),
+      ]).then(([r1, r2]) => [...(r1.data ?? []), ...(r2.data ?? [])])
+    : [] as { id: unknown; name: unknown; club: unknown; position: unknown; team_id: unknown }[]
+
   // ── Join manual ───────────────────────────────────────────────────────────
 
   // Mapa teamId → teamName
@@ -201,7 +210,6 @@ export default async function CampeonatoPage({ params }: Props) {
     : null
 
   const isClassificationLocked = isModuleLocked(CLASSIFICATION_LOCK)
-  const isPodiumLocked = isModuleLocked(PODIUM_BOOT_MVP_LOCK)
 
   // ── Datos del Calendario ──────────────────────────────────────────────────
 
@@ -445,9 +453,6 @@ export default async function CampeonatoPage({ params }: Props) {
 
   // ── Pronósticos especiales de todos los participantes (post-cierre) ──────────
   // Solo se cargan y muestran si ya cerró el módulo Y el usuario tiene los suyos.
-  const playerNameMap = new Map<number, string>(
-    (rawPlayers ?? []).map(p => [p.id as number, p.name as string]),
-  )
   const userHasSpecialPred = specialPred != null && (
     specialPred.gold_team_id != null ||
     specialPred.silver_team_id != null ||
@@ -462,6 +467,21 @@ export default async function CampeonatoPage({ params }: Props) {
       .from('special_predictions')
       .select('user_id, gold_team_id, silver_team_id, bronze_team_id, golden_boot_player_id, mvp_player_id')
       .eq('championship_id', id)
+
+    // Fetch solo los jugadores referenciados (máx ~2×N IDs) en lugar de los ~700 completos
+    const refPlayerIds = [...new Set(
+      (allSpecials ?? []).flatMap(s =>
+        [s.golden_boot_player_id, s.mvp_player_id].filter((x): x is number => x != null)
+      ),
+    )]
+    const playerNameMap = new Map<number, string>()
+    if (refPlayerIds.length > 0) {
+      const { data: neededPlayers } = await admin
+        .from('players').select('id, name').in('id', refPlayerIds)
+      for (const p of neededPlayers ?? []) {
+        playerNameMap.set(p.id as number, p.name as string)
+      }
+    }
 
     specialPredEntries = (allSpecials ?? []).map(s => ({
       userId:               s.user_id as string,
