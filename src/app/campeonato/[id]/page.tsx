@@ -83,7 +83,6 @@ export default async function CampeonatoPage({ params }: Props) {
     { data: rawParticipants },
     { data: rawFeaturedMatches },
     { data: rawOtherMemberships },
-    { data: rawAllGroupPreds },
   ] = await Promise.all([
     // Datos globales — leídos con service role (RLS bloquea matches al usuario regular)
     admin.from('groups').select('id, name').order('name'),
@@ -141,12 +140,15 @@ export default async function CampeonatoPage({ params }: Props) {
       .eq('user_id', user.id)
       .neq('championship_id', id),
 
-    // Predicciones de clasificación de grupo de TODOS los participantes (para tab Resultados)
-    admin
-      .from('group_predictions')
-      .select('user_id, group_id, first_place, second_place, third_place, fourth_place')
-      .eq('championship_id', id),
   ])
+
+  // Group preds de todos: solo si el módulo está activo y aún no cerró el podio
+  const rawAllGroupPreds = (!isPodiumLocked && championship.mod_group_standings)
+    ? (await admin
+        .from('group_predictions')
+        .select('user_id, group_id, first_place, second_place, third_place, fourth_place')
+        .eq('championship_id', id)).data
+    : []
 
   // Jugadores: solo si el módulo está activo y el módulo aún no cerró (~140 KB/carga ahorrado)
   const rawPlayers = needAllPlayers
