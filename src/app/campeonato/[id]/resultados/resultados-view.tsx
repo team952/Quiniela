@@ -235,6 +235,9 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
   // Predicciones para el partido seleccionado
   const matchPreds = selected?.predVisible ? (predsByMatch[selected.id] ?? {}) : {}
 
+  type SortKey = 'total' | 'grp' | 'ko' | 'hoy'
+  const [sortKey, setSortKey] = useState<SortKey>('total')
+
   // Ranking con empates: mismos puntos = misma posición (ranking denso 1,2,2,3…)
   const sorted = useMemo(() => {
     const list = participants.map(p => ({
@@ -242,13 +245,18 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
       total: p.groupPoints + p.knockoutPoints,
       pred: matchPreds[p.userId] ?? null,
     }))
-    list.sort((a, b) => b.total - a.total)
+    const val = (p: typeof list[0]) =>
+      sortKey === 'grp' ? p.groupPoints :
+      sortKey === 'ko'  ? p.knockoutPoints :
+      sortKey === 'hoy' ? p.todayPoints :
+      p.total
+    list.sort((a, b) => val(b) - val(a))
     let rank = 1
     return list.map((p, i) => {
-      if (i > 0 && p.total < list[i - 1].total) rank = i + 1
+      if (i > 0 && val(p) < val(list[i - 1])) rank = i + 1
       return { ...p, rank }
     })
-  }, [participants, matchPreds])
+  }, [participants, matchPreds, sortKey])
 
   const color = selected?.groupName ? (GROUP_COLORS[selected.groupName] ?? '#5b8cff') : '#5b8cff'
   const isLive = selected?.status === 'live'
@@ -284,12 +292,22 @@ export function ResultadosView({ participants, resultMatches, predsByMatch, user
           <tr>
             <th className="l">Participante</th>
             <th style={{ textAlign:'center', padding:'10px 4px', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Pron.</th>
-            {hasTodayMatches && <th style={{ color:'#4ade80', textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', fontWeight:800, letterSpacing:'.04em', textTransform:'uppercase' }}>Hoy</th>}
+            {hasTodayMatches && (
+              <th onClick={() => setSortKey('hoy')} style={{ color: sortKey === 'hoy' ? '#4ade80' : '#4ade8099', textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', fontWeight:800, letterSpacing:'.04em', textTransform:'uppercase', cursor:'pointer', userSelect:'none' }}>
+                Hoy{sortKey === 'hoy' ? ' ▼' : ''}
+              </th>
+            )}
             {modKnockoutMatches ? (
               <>
-                <th style={{ textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Grp</th>
-                <th style={{ textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', color:'#c46bff', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>KO</th>
-                <th style={{ textAlign:'right', padding:'10px 8px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Total</th>
+                <th onClick={() => setSortKey('grp')} style={{ textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', color: sortKey === 'grp' ? 'var(--txt)' : 'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800, cursor:'pointer', userSelect:'none' }}>
+                  Grp{sortKey === 'grp' ? ' ▼' : ''}
+                </th>
+                <th onClick={() => setSortKey('ko')} style={{ textAlign:'right', padding:'10px 4px 10px 0', fontSize:'9px', color: sortKey === 'ko' ? '#c46bff' : '#c46bff99', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800, cursor:'pointer', userSelect:'none' }}>
+                  KO{sortKey === 'ko' ? ' ▼' : ''}
+                </th>
+                <th onClick={() => setSortKey('total')} style={{ textAlign:'right', padding:'10px 8px 10px 0', fontSize:'9px', color: sortKey === 'total' ? 'var(--txt)' : 'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800, cursor:'pointer', userSelect:'none' }}>
+                  Total{sortKey === 'total' ? ' ▼' : ''}
+                </th>
               </>
             ) : (
               <th style={{ textAlign:'right', padding:'10px 8px 10px 0', fontSize:'9px', color:'var(--mut2)', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:800 }}>Pts</th>
