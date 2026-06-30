@@ -92,6 +92,17 @@ export async function processMatchResult(
     }
   }
 
+  // ── Paso 2c: Resolver placeholders W/L de eliminatoria ───────────────────
+  if (phase !== 'group') {
+    const resolveErr = await autoResolveKnockoutWinnerPlaceholders(
+      supabase, matchId, score1, score2,
+      match.team1_id as number | null,
+      match.team2_id as number | null,
+      penalty1, penalty2,
+    )
+    if (resolveErr) errors.push(`AutoResolveKO: ${resolveErr}`)
+  }
+
   // ── Paso 2b: Puntuar group_predictions si el grupo terminó ───────────────
   let groupPredictionsScored = false
   if (standingsUpdated && match.group_id) {
@@ -234,6 +245,42 @@ async function autoResolveKnockoutPlaceholders(
   }
 
   return null
+}
+
+// ── Paso 2c: Resolver placeholders W/L de eliminatoria ───────────────────────
+// Cuando termina un partido KO, busca matches que esperen al ganador ('W{id}')
+// o al perdedor ('L{id}') y les asigna team1_id/team2_id.
+// Cubre R32→R16→QF→SF→Final y el partido de 3er lugar.
+
+async function autoResolveKnockoutWinnerPlaceholders(
+  supabase: SupabaseClient,
+  matchId: number,
+  score1: number,
+  score2: number,
+  team1Id: number | null,
+  team2Id: number | null,
+  penalty1: number | null,
+  penalty2: number | null,
+): Promise<string | null> {
+  if (!team1Id || !team2Id) return null // equipos aún no resueltos
+
+  // Determinar ganador / perdedor (penales desempatan si hay empate)
+  const t1Wins = score1 > score2 || (score1 === score2 && (penalty1 ?? 0) > (penalty2 ?? 0))
+  const winnerId = t1Wins ? team1Id : team2Id
+  const loserId  = t1Wins ? team2Id : team1Id
+
+  const wPlaceholder = `W${matchId}`
+  const lPlaceholder = `L${matchId}`
+
+  const results = await Promise.all([
+    supabase.from('matches').update({ team1_id: winnerId }).eq('team1_placeholder', wPlaceholder),
+    supabase.from('matches').update({ team2_id: winnerId }).eq('team2_placeholder', wPlaceholder),
+    supabase.from('matches').update({ team1_id: loserId  }).eq('team1_placeholder', lPlaceholder),
+    supabase.from('matches').update({ team2_id: loserId  }).eq('team2_placeholder', lPlaceholder),
+  ])
+
+  const errs = results.map(r => r.error?.message).filter(Boolean)
+  return errs.length > 0 ? errs.join('; ') : null
 }
 
 // ── Paso 3: Puntos de predicciones ───────────────────────────────────────────
