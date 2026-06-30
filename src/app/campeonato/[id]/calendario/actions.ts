@@ -162,13 +162,52 @@ export async function copyPredictions(
       (matchRows ?? []).map(m => [m.id as number, m.phase as string]),
     )
 
+    // Para partidos KO: el cierre real es el primer kickoff del día, no las 00:00 ET.
+    // Necesitamos TODOS los matches KO de esas fechas (no solo los del usuario).
+    const koEtDates = new Set<string>()
+    for (const m of matchRows ?? []) {
+      if ((m.phase as string) !== 'knockout' || !m.kickoff_utc) continue
+      const dateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+        .format(new Date(m.kickoff_utc as string))
+      koEtDates.add(dateET)
+    }
+    const firstKoKickoffByDate = new Map<string, number>()
+    if (koEtDates.size > 0) {
+      const { data: allKoDayMatches } = await admin
+        .from('matches')
+        .select('kickoff_utc')
+        .eq('phase', 'knockout')
+        .in('date', [...koEtDates])
+        .not('kickoff_utc', 'is', null)
+      for (const m of allKoDayMatches ?? []) {
+        const dateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+          .format(new Date(m.kickoff_utc as string))
+        const ms = new Date(m.kickoff_utc as string).getTime()
+        const prev = firstKoKickoffByDate.get(dateET)
+        if (prev === undefined || ms < prev) firstKoKickoffByDate.set(dateET, ms)
+      }
+    }
+
     const toInsert: { match_id: number; score1: number; score2: number }[] = []
 
     for (const p of sourcePreds) {
       const kickoff = kickoffMap.get(p.match_id as number)
       const phase = phaseMap.get(p.match_id as number) ?? 'group'
-      if (kickoff === undefined || isMatchLocked(kickoff)) { skippedMatches++; continue }
-      if (phase !== 'group' && !targetChamp?.mod_knockout_matches) { skippedMatches++; continue }
+      if (kickoff === undefined) { skippedMatches++; continue }
+
+      if (phase === 'knockout') {
+        if (!targetChamp?.mod_knockout_matches) { skippedMatches++; continue }
+        // Ventana de gracia: bloqueado al primer kickoff del día, no a las 00:00 ET
+        if (kickoff !== null) {
+          const dateET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+            .format(new Date(kickoff))
+          const firstMs = firstKoKickoffByDate.get(dateET) ?? Infinity
+          if (Date.now() >= firstMs) { skippedMatches++; continue }
+        }
+      } else {
+        if (isMatchLocked(kickoff)) { skippedMatches++; continue }
+      }
+
       toInsert.push({ match_id: p.match_id as number, score1: p.score1 as number, score2: p.score2 as number })
     }
 

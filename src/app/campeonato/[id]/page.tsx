@@ -298,16 +298,17 @@ export default async function CampeonatoPage({ params }: Props) {
     const t1 = m.team1_id ? teamNameMap.get(m.team1_id as number) : null
     const t2 = m.team2_id ? teamNameMap.get(m.team2_id as number) : null
     return {
-      id:        m.id as number,
-      team1Name: t1 ?? (m.team1_placeholder as string | null) ?? '?',
-      team2Name: t2 ?? (m.team2_placeholder as string | null) ?? '?',
-      date:      m.date as string,
-      score1:    m.score1 as number | null,
-      score2:    m.score2 as number | null,
-      ground:    m.ground as string | null,
-      groupName: m.group_id ? (groupNameMap.get(m.group_id as number) ?? null) : null,
-      round:     (m.round as string | null) ?? null,
-      status:    m.status as string,
+      id:         m.id as number,
+      team1Name:  t1 ?? (m.team1_placeholder as string | null) ?? '?',
+      team2Name:  t2 ?? (m.team2_placeholder as string | null) ?? '?',
+      date:       m.date as string,
+      kickoffUtc: m.kickoff_utc as string | null,
+      score1:     m.score1 as number | null,
+      score2:     m.score2 as number | null,
+      ground:     m.ground as string | null,
+      groupName:  m.group_id ? (groupNameMap.get(m.group_id as number) ?? null) : null,
+      round:      (m.round as string | null) ?? null,
+      status:     m.status as string,
       // Predicciones visibles si: partido finalizado O cerrado por fecha.
       // Anti-copia: si el admin entró el resultado, el partido ya no es "abierto".
       predVisible: (m.status as string) === 'finished' || (m.status as string) === 'live' || isMatchLocked(m.kickoff_utc as string | null),

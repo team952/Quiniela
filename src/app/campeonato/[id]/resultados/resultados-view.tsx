@@ -18,6 +18,7 @@ export type Participant = {
 export type ResultMatch = {
   id: number
   date: string           // YYYY-MM-DD
+  kickoffUtc: string | null
   team1Name: string
   team2Name: string
   score1: number | null
@@ -171,7 +172,11 @@ function MatchChip({ match, selected, onClick, hasPred }: {
 
       {/* Estado del partido */}
       <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' as const, color: isLive ? 'var(--mag)' : 'var(--mut2)' }}>
-        {isLive ? '● vivo' : hasResult ? 'Final' : 'Programado'}
+        {isLive ? '● vivo' : hasResult ? 'Final' : (
+          match.kickoffUtc
+            ? new Date(match.kickoffUtc).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false })
+            : 'Programado'
+        )}
       </span>
 
       {/* Alerta de sin pronóstico */}
